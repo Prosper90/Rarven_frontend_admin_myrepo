@@ -12,7 +12,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   const res = await fetch(`${BASE}${path}`, { ...options, headers });
 
-  if (res.status === 401) {
+  if (res.status === 401 && token) {
     clearToken();
     window.location.href = '/login';
     throw new Error('Session expired');
@@ -92,7 +92,7 @@ export const adminApi = {
       body:    form,
     }).then(async (res) => {
       const data = await res.json();
-      if (res.status === 401) { clearToken(); window.location.href = '/login'; throw new Error('Session expired'); }
+      if (res.status === 401 && token) { clearToken(); window.location.href = '/login'; throw new Error('Session expired'); }
       if (!res.ok) throw new Error(data.message ?? 'Upload failed');
       return data;
     });
