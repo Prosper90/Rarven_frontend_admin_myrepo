@@ -150,6 +150,8 @@ export const adminApi = {
     api.get<{ success: boolean; config: { budgetCap: number; pricingMultiplier: number } }>('/api/admin/pro/config'),
   updateProConfig: (data: { budgetCap?: number; pricingMultiplier?: number }) =>
     api.put<{ success: boolean; config: { budgetCap: number; pricingMultiplier: number } }>('/api/admin/pro/config', data),
+  getProOverview: () =>
+    api.get<{ success: boolean; overview: ProOverview | null }>('/api/admin/pro/overview'),
 
   // FieldPort Pro — Finance Admin
   getProPoolSummary: (gameweekId: string) =>
@@ -158,6 +160,10 @@ export const adminApi = {
     api.post<{ success: boolean; gameweek: ProGameweek }>(`/api/admin/pro/gameweeks/${gameweekId}/settle`, {}),
   redistributeProPrizes: (gameweekId: string) =>
     api.post<{ success: boolean; redistributed: number }>(`/api/admin/pro/gameweeks/${gameweekId}/redistribute`, {}),
+  resetProGameweek: (gameweekId: string) =>
+    api.post<{ success: boolean; gameweek: ProGameweek; squadsRefunded: number; refundedTotal: number }>(
+      `/api/admin/pro/gameweeks/${gameweekId}/reset`, {},
+    ),
 
   // Users
   listUsers: (params?: { region?: string; page?: number }) => {
@@ -338,6 +344,14 @@ export interface ProPoolSummary {
   poolTotal: number;
   houseCut: number;
   settledAt: string | null;
+}
+
+export interface ProOverview {
+  gameweek: { _id: string; number: number; status: ProGameweek['status'] };
+  squadCount: number;
+  totalSpent: number;
+  leader: { userId: string; name: string; score: number } | null;
+  leaderSource: 'settled' | 'live' | 'none';
 }
 
 export interface AdminUser {

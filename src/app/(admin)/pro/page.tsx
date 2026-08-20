@@ -1,11 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
-import { adminApi, type ProGameweek, type ProPoolSummary } from "@/lib/api";
+import { adminApi, type ProGameweek, type ProPoolSummary, type ProOverview } from "@/lib/api";
 import { getAdminInfo } from "@/lib/auth";
 import Badge from "@/components/Badge";
 import Modal from "@/components/Modal";
 import StatCard from "@/components/StatCard";
-import { Plus, Lock, PlayCircle, RefreshCw, Loader2, Wallet, RotateCcw } from "lucide-react";
+import { Plus, Lock, PlayCircle, RefreshCw, Loader2, Wallet, RotateCcw, Crown, Users, RotateCw } from "lucide-react";
 
 function fmtCurrency(n: number) { return "₦" + n.toLocaleString(); }
 function fmtDate(iso: string) { return new Date(iso).toLocaleDateString("en-NG", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); }
@@ -20,6 +20,7 @@ export default function ProAdminPage() {
 
   const [gameweeks, setGameweeks] = useState<ProGameweek[]>([]);
   const [config, setConfig] = useState<{ budgetCap: number; pricingMultiplier: number } | null>(null);
+  const [overview, setOverview] = useState<ProOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -40,12 +41,14 @@ export default function ProAdminPage() {
   async function load() {
     setLoading(true);
     try {
-      const [gwRes, cfgRes] = await Promise.all([
+      const [gwRes, cfgRes, ovRes] = await Promise.all([
         adminApi.listProGameweeks(),
         adminApi.getProConfig(),
+        adminApi.getProOverview().catch(() => ({ overview: null })),
       ]);
       setGameweeks(gwRes.gameweeks);
       setConfig(cfgRes.config);
+      setOverview(ovRes.overview);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally { setLoading(false); }
@@ -77,6 +80,21 @@ export default function ProAdminPage() {
     setBusy(id + "-lock");
     try { await adminApi.forceLockProGameweek(id); load(); }
     catch (e: unknown) { setError(e instanceof Error ? e.message : "Lock failed"); }
+    finally { setBusy(null); }
+  }
+
+  async function handleReset(gw: ProGameweek) {
+    if (!confirm(
+      `Reset Gameweek #${gw.number}? This refunds every squad's spend back to users' wallets, ` +
+      `deletes all squads and the fixture schedule, and returns the gameweek to "upcoming". This cannot be undone.`
+    )) return;
+
+    setBusy(gw._id + "-reset");
+    try {
+      const res = await adminApi.resetProGameweek(gw._id);
+      setError(`Gameweek #${gw.number} reset — ${res.squadsRefunded} squad(s) refunded, ${fmtCurrency(res.refundedTotal)} returned to wallets.`);
+      load();
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "Reset failed"); }
     finally { setBusy(null); }
   }
 
@@ -165,6 +183,47 @@ export default function ProAdminPage() {
         <StatCard label="Open Gameweek" value={openGw ? `#${openGw.number}` : "None"} accent="success" />
       </div>
 
+      {overview && (
+        <div className="bg-surface border border-border rounded-2xl px-5 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-bold text-text">
+              Gameweek #{overview.gameweek.number} Snapshot
+            </p>
+            <Badge label={overview.gameweek.status} variant={STATUS_VARIANT[overview.gameweek.status]} />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="flex items-start gap-2.5">
+              <Crown size={16} className="text-warning mt-0.5" />
+              <div>
+                <p className="text-xs text-muted">Currently Leading</p>
+                <p className="text-sm font-bold text-text mt-0.5">
+                  {overview.leader ? overview.leader.name : "—"}
+                </p>
+                <p className="text-[11px] text-faint">
+                  {overview.leader
+                    ? `${overview.leader.score.toFixed(1)} pts${overview.leaderSource === "live" ? " · live" : ""}`
+                    : overview.gameweek.status === "settled" ? "No scored squads" : "Not scored yet"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2.5">
+              <Wallet size={16} className="text-primary mt-0.5" />
+              <div>
+                <p className="text-xs text-muted">Total Spent</p>
+                <p className="text-sm font-bold text-text mt-0.5">{fmtCurrency(overview.totalSpent)}</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2.5">
+              <Users size={16} className="text-info mt-0.5" />
+              <div>
+                <p className="text-xs text-muted">Users Involved</p>
+                <p className="text-sm font-bold text-text mt-0.5">{overview.squadCount}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-surface border border-border rounded-xl px-5 py-4 flex items-center justify-between">
         <div>
           <p className="text-sm font-bold text-text">Recalculate Pricing</p>
@@ -228,6 +287,17 @@ export default function ProAdminPage() {
                         className="text-xs font-bold text-info bg-info/10 border border-info/20 px-3 py-1.5 rounded-lg hover:bg-info/20 transition-colors flex items-center gap-1"
                       >
                         <Wallet size={12} /> Pool
+                      </button>
+                    )}
+                    {gw.status !== "settled" && isFinance && (
+                      <button
+                        onClick={() => handleReset(gw)}
+                        disabled={busy === gw._id + "-reset"}
+                        title="Refunds all squads and clears this gameweek's fixtures"
+                        className="text-xs font-bold text-danger bg-danger/10 border border-danger/20 px-3 py-1.5 rounded-lg hover:bg-danger/20 disabled:opacity-50 transition-colors flex items-center gap-1"
+                      >
+                        {busy === gw._id + "-reset" ? <Loader2 size={12} className="animate-spin" /> : <RotateCw size={12} />}
+                        Reset
                       </button>
                     )}
                   </div>

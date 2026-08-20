@@ -1,5 +1,5 @@
-const KEY       = 'raven_admin_token';
-const ADMIN_KEY = 'raven_admin_info';
+const KEY       = 'rarven_admin_token';
+const ADMIN_KEY = 'rarven_admin_info';
 
 export interface StoredAdminInfo {
   id:   string;
