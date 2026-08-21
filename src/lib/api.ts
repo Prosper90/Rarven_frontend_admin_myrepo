@@ -141,9 +141,12 @@ export const adminApi = {
   forceLockProGameweek: (id: string) =>
     api.patch<{ success: boolean; gameweek: ProGameweek }>(`/api/admin/pro/gameweeks/${id}/force-lock`, {}),
   recalculateProPricing: () =>
-    api.post<{ success: boolean; metrics: { updated: number; failed: number }; pricing: { priced: number }; budgetCap: number }>(
-      '/api/admin/pro/pricing/recalculate', {},
-    ),
+    api.post<{
+      success: boolean;
+      metrics: { updated: number; failed: number; teamsProcessed: number; teamsRemaining: number };
+      pricing: { priced: number };
+      budgetCap: number;
+    }>('/api/admin/pro/pricing/recalculate', {}),
   setProPlayerPrice: (playerId: string, price: number | null) =>
     api.put<{ success: boolean; player: Player }>(`/api/admin/pro/players/${playerId}/price`, { price }),
   getProConfig: () =>
@@ -152,6 +155,10 @@ export const adminApi = {
     api.put<{ success: boolean; config: { budgetCap: number; pricingMultiplier: number } }>('/api/admin/pro/config', data),
   getProOverview: () =>
     api.get<{ success: boolean; overview: ProOverview | null }>('/api/admin/pro/overview'),
+  getProGameweekDetail: (id: string) =>
+    api.get<{ success: boolean; detail: ProGameweekDetail }>(`/api/admin/pro/gameweeks/${id}/detail`),
+  syncProGameweekFixtures: (id: string) =>
+    api.post<{ success: boolean; detail: ProGameweekDetail }>(`/api/admin/pro/gameweeks/${id}/sync-fixtures`, {}),
 
   // FieldPort Pro — Finance Admin
   getProPoolSummary: (gameweekId: string) =>
@@ -352,6 +359,35 @@ export interface ProOverview {
   totalSpent: number;
   leader: { userId: string; name: string; score: number } | null;
   leaderSource: 'settled' | 'live' | 'none';
+}
+
+export interface ProFixture {
+  _id: string;
+  gameweek: string;
+  apiFootballFixtureId: number;
+  league: string;
+  homeTeam: string;
+  awayTeam: string;
+  kickoff: string;
+  status: 'scheduled' | 'live' | 'finished';
+  ratingsIngested: boolean;
+}
+
+export interface ProRankedSquad {
+  userId: string;
+  name: string;
+  score: number;
+  rank: number | null;
+}
+
+export interface ProGameweekDetail {
+  gameweek: ProGameweek;
+  squadCount: number;
+  totalSpent: number;
+  leader: { userId: string; name: string; score: number } | null;
+  leaderSource: 'settled' | 'live' | 'none';
+  topSquads: ProRankedSquad[];
+  fixtures: ProFixture[];
 }
 
 export interface AdminUser {

@@ -102,7 +102,10 @@ export default function ProAdminPage() {
     setBusy("recalc");
     try {
       const res = await adminApi.recalculateProPricing();
-      setError(`Pricing recalculated — ${res.pricing.priced} player(s) priced, budget cap ₦${res.budgetCap.toLocaleString()}`);
+      const cov = res.metrics.teamsRemaining > 0
+        ? ` · stats refresh covered this run's team batch, ${res.metrics.teamsRemaining} team(s) still pending (free API tier — click again later to continue)`
+        : " · stats refresh has now covered every team";
+      setError(`Pricing recalculated — ${res.pricing.priced} player(s) priced, budget cap ₦${res.budgetCap.toLocaleString()}${cov}`);
       load();
     } catch (e: unknown) { setError(e instanceof Error ? e.message : "Recalculate failed"); }
     finally { setBusy(null); }
@@ -256,7 +259,9 @@ export default function ProAdminPage() {
             {!loading && gameweeks.length === 0 && <tr><td colSpan={6} className="px-5 py-6 text-center text-sm text-muted">No gameweeks yet.</td></tr>}
             {gameweeks.map((gw) => (
               <tr key={gw._id} className="hover:bg-surface-2 transition-colors">
-                <td className="px-5 py-4 text-sm font-bold text-text">#{gw.number}</td>
+                <td className="px-5 py-4 text-sm font-bold">
+                  <a href={`/pro/${gw._id}`} className="text-text hover:text-primary transition-colors">#{gw.number}</a>
+                </td>
                 <td className="px-5 py-4 text-sm text-muted">{fmtDate(gw.opensAt)}</td>
                 <td className="px-5 py-4 text-sm text-muted">{gw.firstKickoffAt ? fmtDate(gw.firstKickoffAt) : "—"}</td>
                 <td className="px-5 py-4"><Badge label={gw.status} variant={STATUS_VARIANT[gw.status]} /></td>
