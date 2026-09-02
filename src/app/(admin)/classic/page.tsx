@@ -2,7 +2,42 @@
 import { useEffect, useState } from "react";
 import { adminApi, Matchday, MatchdayRecord } from "@/lib/api";
 import Badge from "@/components/Badge";
-import { Radio } from "lucide-react";
+import { Radio, CircleDot } from "lucide-react";
+
+// Sport lineup — only Football pools exist today. The rest are shown as a
+// disabled roadmap teaser (not wired to anything) so admins/investors can
+// see multi-sport is coming without implying it already works.
+const SPORTS = [
+  { label: "Football",   active: true },
+  { label: "Basketball", active: false },
+  { label: "Tennis",     active: false },
+  { label: "Cricket",    active: false },
+];
+
+function SportTabs() {
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      {SPORTS.map((s) => (
+        <div
+          key={s.label}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border ${
+            s.active
+              ? "bg-primary/10 border-primary/30 text-primary"
+              : "bg-surface-3 border-border text-faint cursor-not-allowed select-none"
+          }`}
+        >
+          <CircleDot size={12} />
+          {s.label}
+          {!s.active && (
+            <span className="text-[9px] font-black uppercase tracking-wider bg-surface border border-border px-1.5 py-0.5 rounded text-muted">
+              Soon
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" });
@@ -50,11 +85,14 @@ export default function ClassicPage() {
 
   return (
     <div className="p-8 flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-black text-text">Classic Market</h1>
-        <p className="text-sm text-muted mt-0.5">
-          Pari-mutuel pools · 4 categories (ATT / MID / DEF / GK) · 12% house cut
-        </p>
+      <div className="flex flex-col gap-4">
+        <div>
+          <h1 className="text-xl font-black text-text">Classic Market</h1>
+          <p className="text-sm text-muted mt-0.5">
+            Pari-mutuel pools · 4 categories (ATT / MID / DEF / GK) · 12% house cut
+          </p>
+        </div>
+        <SportTabs />
       </div>
 
       {/* ── Live banner ──────────────────────────────────────────────────────── */}
