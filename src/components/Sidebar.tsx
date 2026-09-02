@@ -12,6 +12,7 @@ import {
   User,
   Users,
   Shield,
+  Trophy,
   LogOut,
 } from "lucide-react";
 import { clearToken, getAdminInfo, StoredAdminInfo } from "@/lib/auth";
@@ -25,6 +26,7 @@ const NAV: { href: string; label: string; icon: React.ElementType; roles: AdminR
   { href: "/match-days", label: "Match Days",  icon: CalendarDays,    roles: ["superadmin", "pool_manager"] },
   { href: "/classic",    label: "Classic",     icon: Zap,             roles: ["superadmin", "pool_manager"] },
   { href: "/pro",        label: "Pro",         icon: TrendingUp,      roles: ["superadmin", "pool_manager"] },
+  { href: "/competitions", label: "Competitions", icon: Trophy,       roles: ["superadmin", "pool_manager"] },
   { href: "/players",    label: "Players",     icon: User,            roles: ["superadmin", "pool_manager"] },
   { href: "/users",      label: "Users",       icon: Users,           roles: ["superadmin", "pool_manager", "support"] },
   { href: "/admins",     label: "Admins",      icon: Shield,          roles: ["superadmin"] },

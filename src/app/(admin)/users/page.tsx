@@ -71,6 +71,17 @@ export default function UsersPage() {
     } finally { setLoading(false); }
   }
 
+  async function handleToggleStatus(u: AdminUser) {
+    const action = u.isActive ? "suspend" : "reactivate";
+    if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} ${u.name}? ${u.isActive ? "They will be unable to log in." : ""}`)) return;
+    try {
+      await adminApi.updateUserStatus(u._id, !u.isActive);
+      load();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Failed");
+    }
+  }
+
   async function handleCredit(e: React.FormEvent) {
     e.preventDefault();
     if (!identifier.trim() || !creditAmount) return;
@@ -263,7 +274,7 @@ export default function UsersPage() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-border">
-              {["Name", "Email", "Phone", "Region", "Currency", "Balance", "KYC", "Joined", "ID"].map((h) => (
+              {["Name", "Email", "Phone", "Region", "Currency", "Balance", "Status", "Joined", "ID"].map((h) => (
                 <th key={h} className="px-5 py-3 text-left text-[10px] font-bold text-muted uppercase tracking-wider">{h}</th>
               ))}
             </tr>
@@ -289,7 +300,17 @@ export default function UsersPage() {
                 <td className="px-5 py-4 text-xs text-faint">{u.currency}</td>
                 <td className="px-5 py-4 text-sm font-semibold text-primary">{fmtCurrency(u.walletBalance, u.currency)}</td>
                 <td className="px-5 py-4">
-                  <Badge label={u.kycVerified ? "verified" : "pending"} variant={u.kycVerified ? "success" : "warning"} />
+                  <div className="flex items-center gap-2">
+                    <Badge label={u.isActive ? "active" : "suspended"} variant={u.isActive ? "success" : "danger"} />
+                    {canCredit && (
+                      <button
+                        onClick={() => handleToggleStatus(u)}
+                        className={`text-[11px] font-semibold hover:underline ${u.isActive ? "text-danger" : "text-success"}`}
+                      >
+                        {u.isActive ? "Suspend" : "Reactivate"}
+                      </button>
+                    )}
+                  </div>
                 </td>
                 <td className="px-5 py-4 text-xs text-muted">{fmtDate(u.createdAt)}</td>
                 <td className="px-5 py-4">

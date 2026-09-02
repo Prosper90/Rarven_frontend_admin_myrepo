@@ -35,7 +35,7 @@ const API_LEAGUES = [
 
 const EMPTY_FORM = {
   name: "", shortName: "", position: "ST", club: "", league: "Premier League",
-  nationality: "", preferredFoot: "Right", eaFcRating: 75,
+  nationality: "", preferredFoot: "Right", rvRating: 75,
   seasonStats: { appearances: 0, goals: 0, assists: 0, cleanSheets: 0, avgRating: 7.0 },
 };
 
@@ -135,7 +135,7 @@ function SquadImporter({ squad, existingPlayers, selected, setSelected, teamName
             {result.skippedList.length > 0 && (
               <p className="text-[11px] text-muted mt-0.5">Skipped: {result.skippedList.map((s) => s.name).join(", ")}</p>
             )}
-            <p className="text-[11px] text-muted mt-1">All imported at EA Rating 60 — edit in Roster tab.</p>
+            <p className="text-[11px] text-muted mt-1">All imported at RV Rating 60 — edit in Roster tab.</p>
           </div>
         </div>
       )}
@@ -539,6 +539,8 @@ export default function PlayersPage() {
   const [clubFilter, setClubFilter] = useState("");
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState("");
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [metricsProgress, setMetricsProgress] = useState<{ total: number; withRealStats: number } | null>(null);
 
   // Read role client-side only (localStorage)
   useEffect(() => { setAdminRole(getAdminInfo()?.role ?? null); }, []);
@@ -566,7 +568,7 @@ export default function PlayersPage() {
   const [uploading, setUploading]               = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); loadProgress(); }, []);
 
   async function load() {
     setLoading(true);
@@ -576,6 +578,13 @@ export default function PlayersPage() {
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally { setLoading(false); }
+  }
+
+  async function loadProgress() {
+    try {
+      const res = await adminApi.getMetricsProgress();
+      setMetricsProgress({ total: res.total, withRealStats: res.withRealStats });
+    } catch { /* non-critical — leave last known value */ }
   }
 
   // ── Search debounce ────────────────────────────────────────────────────────
@@ -625,7 +634,7 @@ export default function PlayersPage() {
     setApiSuggestions([]);
     setApiFootballId(s.apiFootballId);
 
-    // Pre-fill the form (admin only needs to set EA FC Rating)
+    // Pre-fill the form (admin only needs to set RV Rating)
     setForm({
       name:          s.name,
       shortName:     s.name.split(" ").slice(-1)[0] ?? s.name,   // default: last name
@@ -634,7 +643,7 @@ export default function PlayersPage() {
       league:        LEAGUES.includes(s.league) ? s.league : "Others",
       nationality:   s.nationality,
       preferredFoot: "Right",  // not available from API — admin can change
-      eaFcRating:    75,       // always manual
+      rvRating:    75,       // always manual
       seasonStats: {
         appearances: s.seasonStats.appearances,
         goals:       s.seasonStats.goals,
@@ -685,7 +694,7 @@ export default function PlayersPage() {
     setForm({
       name: p.name, shortName: p.shortName, position: p.position,
       club: p.club, league: p.league, nationality: p.nationality,
-      preferredFoot: p.preferredFoot, eaFcRating: p.eaFcRating,
+      preferredFoot: p.preferredFoot, rvRating: p.rvRating,
       seasonStats: p.seasonStats,
     });
     setEditId(p._id);
@@ -771,9 +780,19 @@ export default function PlayersPage() {
     } catch (e: unknown) { alert(e instanceof Error ? e.message : "Failed"); }
   }
 
+  async function handleUpdateInfo(id: string) {
+    setRefreshingId(id);
+    try {
+      await adminApi.refreshPlayerMetrics(id);
+      load();
+      loadProgress();
+    } catch (e: unknown) { alert(e instanceof Error ? e.message : "Failed"); }
+    finally { setRefreshingId(null); }
+  }
+
   // ── Derived ────────────────────────────────────────────────────────────────
 
-  const basePrice     = Math.max(0, (form.eaFcRating - 60) * 150);
+  const basePrice     = Math.max(0, (form.rvRating - 60) * 150);
   const displayPreview = imagePreview ?? currentImageUrl ?? null;
   const showSuggestions = !apiSelected && apiSuggestions.length > 0;
   const showSearchSection = modal === "create" && !manualMode;
@@ -833,6 +852,38 @@ export default function PlayersPage() {
 
       {/* ── Roster tab ── */}
       {tab === "roster" && (<>
+
+      {/* Season-stats coverage — the resumable team-batched refresh (Pro
+          admin page's "Recalculate Pricing") is what actually advances this;
+          shown here too since this is the page admins actually manage
+          players from. */}
+      {metricsProgress && (
+        <div className="rounded-xl bg-surface border border-border px-4 py-3 flex items-center gap-4">
+          <div className="flex-1">
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-xs font-semibold text-text">
+                {metricsProgress.withRealStats.toLocaleString()} / {metricsProgress.total.toLocaleString()} players have real season stats
+              </p>
+              <span className="text-[11px] text-muted">
+                {Math.round((metricsProgress.withRealStats / Math.max(metricsProgress.total, 1)) * 100)}%
+              </span>
+            </div>
+            <div className="w-full h-1.5 bg-surface-3 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all"
+                style={{ width: `${Math.min((metricsProgress.withRealStats / Math.max(metricsProgress.total, 1)) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+          <a
+            href="/pro"
+            className="shrink-0 text-xs font-semibold text-primary hover:underline whitespace-nowrap"
+            title="Free API tier — click Recalculate Pricing repeatedly to keep making progress"
+          >
+            Recalculate on Pro page →
+          </a>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col gap-3">
@@ -907,7 +958,7 @@ export default function PlayersPage() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-border">
-              {["Player", "Pos", "Club", "League", "EA Rating", "Status", "Actions"].map((h) => (
+              {["Player", "Pos", "Club", "League", "RV Rating", "Status", "Actions"].map((h) => (
                 <th key={h} className="px-5 py-3 text-left text-[10px] font-bold text-muted uppercase tracking-wider">{h}</th>
               ))}
             </tr>
@@ -931,13 +982,23 @@ export default function PlayersPage() {
                 </td>
                 <td className="px-5 py-4 text-sm text-muted">{p.club}</td>
                 <td className="px-5 py-4 text-xs text-faint">{p.league}</td>
-                <td className="px-5 py-4 text-sm font-bold text-primary">{p.eaFcRating}</td>
+                <td className="px-5 py-4 text-sm font-bold text-primary">{p.rvRating}</td>
                 <td className="px-5 py-4">
                   <Badge label={p.isActive ? "active" : "inactive"} variant={p.isActive ? "success" : "neutral"} />
                 </td>
                 <td className="px-5 py-4">
                   <div className="flex items-center gap-3">
                     <button onClick={() => openEdit(p)} className="text-xs text-info hover:underline font-semibold">Edit</button>
+                    {p.apiFootballId && (
+                      <button
+                        onClick={() => handleUpdateInfo(p._id)}
+                        disabled={refreshingId === p._id}
+                        className="text-xs text-primary hover:underline font-semibold disabled:opacity-50"
+                        title="Fetch this player's real season stats from api-football (1 request)"
+                      >
+                        {refreshingId === p._id ? "Updating…" : "Update Info"}
+                      </button>
+                    )}
                     {p.isActive && (
                       <button onClick={() => handleDeactivate(p._id)} className="text-xs text-danger hover:underline">Deactivate</button>
                     )}
@@ -967,7 +1028,7 @@ export default function PlayersPage() {
                 </p>
                 <p className="text-[11px] text-faint mb-3">
                   Select a league, then type the player name — club, nationality and season stats fill automatically.
-                  EA FC Rating must always be set manually.
+                  RV Rating must always be set manually.
                 </p>
 
                 {/* League selector */}
@@ -1152,11 +1213,11 @@ export default function PlayersPage() {
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-muted uppercase tracking-wider">
-                    EA FC Rating
+                    RV Rating
                     <span className="text-faint normal-case font-normal ml-1">(base price: {fmtCurrency(basePrice)})</span>
                   </label>
-                  <input type="number" min={60} max={99} value={form.eaFcRating}
-                    onChange={(e) => setForm({ ...form, eaFcRating: parseInt(e.target.value) || 75 })}
+                  <input type="number" min={60} max={99} value={form.rvRating}
+                    onChange={(e) => setForm({ ...form, rvRating: parseInt(e.target.value) || 75 })}
                     className="bg-surface-2 border border-border rounded-xl px-4 py-2.5 text-sm text-text outline-none focus:border-primary/50 ring-1 ring-primary/30" />
                   <p className="text-[10px] text-primary -mt-0.5">⚡ Always set manually — not from any API</p>
                 </div>

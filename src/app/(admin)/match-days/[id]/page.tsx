@@ -521,7 +521,7 @@ export default function MatchDayDetailPage({ params }: { params: Promise<{ id: s
                   <span className="text-xs font-black w-6 text-faint">{p.position}</span>
                   <span className="flex-1 text-sm font-semibold">{p.name}</span>
                   <span className="text-xs text-muted">{p.club}</span>
-                  <span className="text-xs font-bold text-amber-400">EA {p.eaFcRating}</span>
+                  <span className="text-xs font-bold text-amber-400">RV {p.rvRating}</span>
                 </button>
               ))}
               {eligiblePlayers.length === 0 && (

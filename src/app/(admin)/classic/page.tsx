@@ -183,7 +183,10 @@ export default function ClassicPage() {
             <p className="text-xs text-muted mt-0.5">Weekly (Match Weeks) and Daily (Match Days) pools combined</p>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-muted">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-primary/30" /> Weekly</span>
+            <span className="flex items-center gap-1.5 opacity-50">
+              <span className="w-2 h-2 rounded-sm bg-primary/30" /> Weekly
+              <span className="text-[9px] font-black uppercase tracking-wider bg-surface-3 border border-border px-1.5 py-0.5 rounded text-faint">Paused</span>
+            </span>
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-500/30" /> Daily</span>
           </div>
         </div>

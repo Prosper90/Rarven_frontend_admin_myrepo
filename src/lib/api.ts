@@ -149,6 +149,10 @@ export const adminApi = {
     }>('/api/admin/pro/pricing/recalculate', {}),
   setProPlayerPrice: (playerId: string, price: number | null) =>
     api.put<{ success: boolean; player: Player }>(`/api/admin/pro/players/${playerId}/price`, { price }),
+  refreshPlayerMetrics: (playerId: string) =>
+    api.post<{ success: boolean; player: Player }>(`/api/admin/pro/players/${playerId}/refresh-metrics`, {}),
+  getMetricsProgress: () =>
+    api.get<{ success: boolean; total: number; withRealStats: number }>('/api/admin/pro/pricing/progress'),
   getProConfig: () =>
     api.get<{ success: boolean; config: { budgetCap: number; pricingMultiplier: number } }>('/api/admin/pro/config'),
   updateProConfig: (data: { budgetCap?: number; pricingMultiplier?: number }) =>
@@ -179,6 +183,8 @@ export const adminApi = {
     if (params?.page)   qs.set('page', String(params.page));
     return api.get<{ success: boolean; users: AdminUser[]; total: number; pages: number }>(`/api/admin/users?${qs}`);
   },
+  updateUserStatus: (id: string, isActive: boolean) =>
+    api.patch<{ success: boolean; user: AdminUser }>(`/api/admin/users/${id}/status`, { isActive }),
 
   // Admin management (superadmin only)
   listAdmins: () =>
@@ -217,6 +223,27 @@ export const adminApi = {
     ),
   listPromoCredits: () =>
     api.get<{ success: boolean; credits: PromoCredit[] }>('/api/admin/users/credits'),
+
+  // Competitions (marketing prizes — real, withdrawable money)
+  listCompetitions: () =>
+    api.get<{ success: boolean; competitions: Competition[] }>('/api/admin/competitions'),
+  createCompetition: (data: {
+    title: string; description?: string; market: 'pro' | 'classic' | 'both';
+    prizeAmount: number; startsAt?: string; endsAt?: string;
+  }) =>
+    api.post<{ success: boolean; competition: Competition }>('/api/admin/competitions', data),
+  updateCompetitionStatus: (id: string, status: 'draft' | 'active' | 'ended') =>
+    api.patch<{ success: boolean; competition: Competition }>(`/api/admin/competitions/${id}/status`, { status }),
+  rewardCompetitionWinner: (id: string, identifier: string, amount: number, note?: string) =>
+    api.post<{
+      success: boolean;
+      transaction: CompetitionAward;
+      competition: Competition;
+      user: { _id: string; name: string; email: string; walletBalance: number };
+      reserveAfter: number;
+    }>(`/api/admin/competitions/${id}/reward`, { identifier, amount, ...(note ? { note } : {}) }),
+  listCompetitionAwards: (id: string) =>
+    api.get<{ success: boolean; awards: CompetitionAward[] }>(`/api/admin/competitions/${id}/awards`),
 };
 
 // ── Shared types (mirrors backend models) ────────────────────────────────────
@@ -241,7 +268,7 @@ export interface Player {
   league: string;
   nationality: string;
   preferredFoot: string;
-  eaFcRating: number;
+  rvRating: number;
   basePrice: number;
   imageUrl: string | null;
   isActive: boolean;
@@ -398,7 +425,7 @@ export interface AdminUser {
   region: string;
   currency: string;
   walletBalance: number;
-  kycVerified: boolean;
+  isActive: boolean;
   createdAt: string;
 }
 
@@ -435,5 +462,32 @@ export interface PromoCredit {
   description: string;
   reference: string;
   metadata: { adminId?: string; adminNote?: string | null };
+  createdAt: string;
+}
+
+export interface Competition {
+  _id: string;
+  title: string;
+  description: string | null;
+  market: 'pro' | 'classic' | 'both';
+  prizeAmount: number;
+  awardedAmount: number;
+  status: 'draft' | 'active' | 'ended';
+  startsAt: string | null;
+  endsAt: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CompetitionAward {
+  _id: string;
+  user: { _id: string; name: string; email: string } | string;
+  type: string;
+  amount: number;
+  balanceAfter: number;
+  description: string;
+  reference: string;
+  metadata: { competitionId?: string; adminId?: string; adminNote?: string | null };
   createdAt: string;
 }

@@ -6,7 +6,6 @@ import Modal from "@/components/Modal";
 import StatCard from "@/components/StatCard";
 import {
   ArrowLeft,
-  Plus,
   Check,
   Loader2,
   Search,
@@ -22,9 +21,6 @@ const CAT_LABELS: Record<string, string> = {
 };
 
 const POOL_CATEGORIES = ["GK","DEF","MID","ATT"] as const;
-const POOL_CATEGORY_LABELS: Record<string, string> = {
-  GK: "Goalkeepers", DEF: "Defenders", MID: "Midfielders", ATT: "Attackers",
-};
 
 function fmtCurrency(n: number) { return "₦" + n.toLocaleString(); }
 
@@ -42,10 +38,6 @@ export default function MatchdayDetailPage({ params }: { params: Promise<{ id: s
   const [settlePool, setSettlePool]         = useState<ClassicPool | null>(null);
   const [winnerPlayerId, setWinnerPlayerId] = useState("");
   const [settling, setSettling]             = useState(false);
-
-  // Create pool modal
-  const [showAddPool, setShowAddPool] = useState(false);
-  const [addPos, setAddPos]           = useState("ATT");
 
   // Pool position filter (classic pools table)
   const [poolPosFilter, setPoolPosFilter] = useState("ALL");
@@ -84,14 +76,6 @@ export default function MatchdayDetailPage({ params }: { params: Promise<{ id: s
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally { setLoading(false); }
-  }
-
-  async function handleAddPool() {
-    try {
-      await adminApi.createPool({ poolType: 'weekly', matchweek: matchdayId, position: addPos });
-      setShowAddPool(false);
-      load();
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : "Failed"); }
   }
 
   async function handleSettlePool() {
@@ -316,19 +300,12 @@ export default function MatchdayDetailPage({ params }: { params: Promise<{ id: s
             <p className="text-sm font-bold text-text">Weekly Classic Pools</p>
             <p className="text-xs text-muted mt-0.5">Pari-mutuel · best of the week · 12% house cut</p>
           </div>
-          {matchday?.status !== "open" ? (
-            <span className="text-xs text-warning bg-warning/10 border border-warning/20 px-3 py-1.5 rounded-xl">
-              Open match week to add pools
-            </span>
-          ) : (
-            <button
-              onClick={() => setShowAddPool(true)}
-              className="px-3 py-2 rounded-xl bg-surface-3 border border-border text-xs font-semibold text-muted hover:text-text hover:border-primary/30 transition-colors flex items-center gap-1.5"
-            >
-              <Plus size={13} />
-              Add Pool
-            </button>
-          )}
+          <span
+            title="Weekly pools are paused — daily is the focus for now. Existing weekly pools still settle normally."
+            className="text-xs text-faint bg-surface-3 border border-border px-3 py-1.5 rounded-xl cursor-not-allowed select-none"
+          >
+            Weekly paused — new pools disabled
+          </span>
         </div>
 
         {/* Position search bar */}
@@ -489,30 +466,6 @@ export default function MatchdayDetailPage({ params }: { params: Promise<{ id: s
               >
                 {settling ? <><Loader2 size={14} className="animate-spin" />Settling…</> : "Confirm Settlement"}
               </button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* Add Pool */}
-      {showAddPool && (
-        <Modal title="Add Classic Pool" onClose={() => setShowAddPool(false)}>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-muted uppercase tracking-wider">Position</label>
-              <select
-                value={addPos}
-                onChange={(e) => setAddPos(e.target.value)}
-                className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none [color-scheme:dark]"
-              >
-                {POOL_CATEGORIES.map((p) => (
-                  <option key={p} value={p}>{POOL_CATEGORY_LABELS[p]}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setShowAddPool(false)} className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold text-muted hover:text-text transition-colors">Cancel</button>
-              <button onClick={handleAddPool} className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary-dim transition-colors">Add Pool</button>
             </div>
           </div>
         </Modal>
