@@ -136,8 +136,8 @@ export const adminApi = {
     api.get<{ success: boolean; gameweeks: ProGameweek[] }>('/api/admin/pro/gameweeks'),
   createProGameweek: (data: { number: number; season?: string; opensAt: string; from: string; to: string; leagueIds?: number[] }) =>
     api.post<{ success: boolean; gameweek: ProGameweek }>('/api/admin/pro/gameweeks', data),
-  openProGameweek: (id: string) =>
-    api.post<{ success: boolean; gameweek: ProGameweek }>(`/api/admin/pro/gameweeks/${id}/open`, {}),
+  openProGameweek: (id: string, skipRefresh?: boolean) =>
+    api.post<{ success: boolean; gameweek: ProGameweek }>(`/api/admin/pro/gameweeks/${id}/open`, { skipRefresh }),
   forceLockProGameweek: (id: string) =>
     api.patch<{ success: boolean; gameweek: ProGameweek }>(`/api/admin/pro/gameweeks/${id}/force-lock`, {}),
   recalculateProPricing: () =>
@@ -199,6 +199,8 @@ export const adminApi = {
     api.get<{ success: boolean; reserve: number }>('/api/admin/reserve'),
   setReserve: (balance: number) =>
     api.put<{ success: boolean; reserve: number }>('/api/admin/reserve', { balance }),
+  topUpReserve: (amount: number) =>
+    api.post<{ success: boolean; reserve: number }>('/api/admin/reserve/topup', { amount }),
   fundReserve: (amount: number) =>
     api.post<{ success: boolean; authorization_url: string; access_code: string; reference: string }>(
       '/api/admin/reserve/fund', { amount }

@@ -14,7 +14,7 @@ const STATUS_VARIANT: Record<Competition["status"], "neutral" | "open" | "settle
 };
 
 const MARKET_LABEL: Record<Competition["market"], string> = {
-  pro: "Pro Fantasy", classic: "Classic", both: "Pro + Classic",
+  pro: "Fantasy", classic: "Classic", both: "Fantasy + Classic",
 };
 
 export default function CompetitionsPage() {
@@ -247,7 +247,7 @@ export default function CompetitionsPage() {
                 <label className="text-xs font-semibold text-muted uppercase tracking-wider">Market</label>
                 <select value={market} onChange={(e) => setMarket(e.target.value as Competition["market"])}
                   className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none [color-scheme:dark]">
-                  <option value="pro">Pro Fantasy</option>
+                  <option value="pro">Fantasy</option>
                   <option value="classic">Classic</option>
                   <option value="both">Both</option>
                 </select>

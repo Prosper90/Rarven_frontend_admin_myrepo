@@ -66,7 +66,7 @@ export default function ProGameweekDetailPage({ params }: { params: Promise<{ id
     return (
       <div className="p-8 flex flex-col gap-4">
         <a href="/pro" className="flex items-center gap-1.5 text-sm text-muted hover:text-text transition-colors w-fit">
-          <ArrowLeft size={14} /> FieldPort Pro
+          <ArrowLeft size={14} /> Fantasy Market
         </a>
         <p className="text-sm text-danger">{error || "Gameweek not found"}</p>
       </div>
@@ -80,7 +80,7 @@ export default function ProGameweekDetailPage({ params }: { params: Promise<{ id
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <a href="/pro" className="text-sm text-muted hover:text-text transition-colors flex items-center gap-1">
-            <ArrowLeft size={14} /> FieldPort Pro
+            <ArrowLeft size={14} /> Fantasy Market
           </a>
           <span className="text-faint">/</span>
           <h1 className="text-xl font-black text-text">Gameweek #{gw.number}</h1>

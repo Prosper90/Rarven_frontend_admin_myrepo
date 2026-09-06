@@ -14,6 +14,18 @@ const STATUS_VARIANT: Record<ProGameweek["status"], "upcoming" | "open" | "locke
   upcoming: "upcoming", open: "open", locked: "locked", settling: "locked", settled: "settled",
 };
 
+// Only Premier League has real priced player coverage right now (see the
+// roster progress bar on the Players page) — pulling fixtures for a league
+// with no priced players just wastes API quota on data no squad can use.
+// Check others in once their players are actually priced.
+const LEAGUE_OPTIONS = [
+  { id: 39,  name: "Premier League", default: true  },
+  { id: 140, name: "La Liga",        default: false },
+  { id: 78,  name: "Bundesliga",     default: false },
+  { id: 135, name: "Serie A",        default: false },
+  { id: 61,  name: "Ligue 1",        default: false },
+];
+
 export default function ProAdminPage() {
   const admin = getAdminInfo();
   const isFinance = admin?.role === "superadmin";
@@ -30,6 +42,10 @@ export default function ProAdminPage() {
   const [opensAt, setOpensAt] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [leagueIds, setLeagueIds] = useState<number[]>(
+    LEAGUE_OPTIONS.filter((l) => l.default).map((l) => l.id),
+  );
+  const [skipRefresh, setSkipRefresh] = useState(true);
 
   const [showConfig, setShowConfig] = useState(false);
   const [budgetCapDraft, setBudgetCapDraft] = useState("");
@@ -60,7 +76,7 @@ export default function ProAdminPage() {
     setBusy("create");
     try {
       await adminApi.createProGameweek({
-        number: Number(gwNumber), opensAt, from: fromDate, to: toDate,
+        number: Number(gwNumber), opensAt, from: fromDate, to: toDate, leagueIds,
       });
       setShowCreate(false);
       setGwNumber(""); setOpensAt(""); setFromDate(""); setToDate("");
@@ -70,8 +86,13 @@ export default function ProAdminPage() {
   }
 
   async function handleOpen(id: string) {
+    if (!skipRefresh && !confirm(
+      "This will re-fetch fresh season stats for every player across all supported leagues " +
+      "(up to ~85 API requests, paced ~6.5s apart — several minutes, and can exhaust a free-tier " +
+      "daily quota on its own). Continue?"
+    )) return;
     setBusy(id + "-open");
-    try { await adminApi.openProGameweek(id); load(); }
+    try { await adminApi.openProGameweek(id, skipRefresh); load(); }
     catch (e: unknown) { setError(e instanceof Error ? e.message : "Open failed"); }
     finally { setBusy(null); }
   }
@@ -159,10 +180,14 @@ export default function ProAdminPage() {
     <div className="p-8 flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-black text-text">FieldPort Pro</h1>
+          <h1 className="text-xl font-black text-text">Fantasy Market</h1>
           <p className="text-sm text-muted mt-0.5">Fantasy squads · position-weighted pricing · weekly prize pool</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-[11px] text-muted cursor-pointer select-none" title="When opening a gameweek, skip re-fetching fresh stats for every player (saves API quota, uses whatever pricing already exists)">
+            <input type="checkbox" checked={skipRefresh} onChange={(e) => setSkipRefresh(e.target.checked)} className="accent-primary" />
+            Skip metrics refresh on open
+          </label>
           <button
             onClick={() => setShowConfig(true)}
             className="px-3 py-2 rounded-xl bg-surface-3 border border-border text-xs font-semibold text-muted hover:text-text transition-colors"
@@ -181,7 +206,7 @@ export default function ProAdminPage() {
       {error && <p className="text-xs text-danger bg-danger/10 border border-danger/20 rounded-xl px-4 py-3">{error}</p>}
 
       <div className="grid grid-cols-3 gap-4">
-        <StatCard label="Budget Cap" value={config ? fmtCurrency(config.budgetCap) : "—"} accent="primary" />
+        <StatCard label="Reference Budget" value={config ? fmtCurrency(config.budgetCap) : "—"} accent="primary" />
         <StatCard label="Pricing Multiplier" value={config ? `×${config.pricingMultiplier}` : "—"} accent="info" />
         <StatCard label="Open Gameweek" value={openGw ? `#${openGw.number}` : "None"} accent="success" />
       </div>
@@ -339,12 +364,28 @@ export default function ProAdminPage() {
                   className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none [color-scheme:dark]" />
               </div>
             </div>
-            <p className="text-[10px] text-faint">Pulls the fixture schedule for the default supported leagues (EPL, La Liga, Bundesliga, Serie A, Ligue 1) in this date range.</p>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-muted uppercase tracking-wider">Leagues</label>
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                {LEAGUE_OPTIONS.map((l) => (
+                  <label key={l.id} className="flex items-center gap-1.5 text-xs text-muted cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={leagueIds.includes(l.id)}
+                      onChange={(e) => setLeagueIds((prev) => e.target.checked ? [...prev, l.id] : prev.filter((id) => id !== l.id))}
+                      className="accent-primary"
+                    />
+                    {l.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <p className="text-[10px] text-faint">Only pull leagues whose players are actually priced (check the roster progress bar on the Players page) — fixtures from an unpriced league just waste API quota. Premier League only until more leagues are priced.</p>
             <div className="flex gap-3">
               <button onClick={() => setShowCreate(false)} className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold text-muted hover:text-text transition-colors">Cancel</button>
               <button
                 onClick={handleCreate}
-                disabled={!gwNumber || !opensAt || !fromDate || !toDate || busy === "create"}
+                disabled={!gwNumber || !opensAt || !fromDate || !toDate || leagueIds.length === 0 || busy === "create"}
                 className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-bold disabled:opacity-50 hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"
               >
                 {busy === "create" ? <Loader2 size={14} className="animate-spin" /> : "Create"}
@@ -356,10 +397,10 @@ export default function ProAdminPage() {
 
       {/* Config */}
       {showConfig && (
-        <Modal title="Pro Config" onClose={() => setShowConfig(false)}>
+        <Modal title="Fantasy Config" onClose={() => setShowConfig(false)}>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-muted uppercase tracking-wider">Budget Cap (₦)</label>
+              <label className="text-xs font-semibold text-muted uppercase tracking-wider">Reference Budget (₦) — not enforced</label>
               <input type="number" defaultValue={config?.budgetCap} onChange={(e) => setBudgetCapDraft(e.target.value)} placeholder={String(config?.budgetCap ?? "")}
                 className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none focus:border-primary/50" />
             </div>
@@ -368,7 +409,7 @@ export default function ProAdminPage() {
               <input type="number" defaultValue={config?.pricingMultiplier} onChange={(e) => setMultiplierDraft(e.target.value)} placeholder={String(config?.pricingMultiplier ?? "")}
                 className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none focus:border-primary/50" />
             </div>
-            <p className="text-[10px] text-faint">Price (₦) = Player Score (0-10) × multiplier. Budget cap is re-simulated automatically each time a gameweek opens — this sets a manual override.</p>
+            <p className="text-[10px] text-faint">Price (₦) = Player Score (0-10) × multiplier. Squad purchases are real money — a user&apos;s wallet balance is the only real spending limit. The reference budget below is just a display figure (e.g. for house-account seeding), no longer enforced on real purchases.</p>
             <div className="flex gap-3">
               <button onClick={() => setShowConfig(false)} className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold text-muted hover:text-text transition-colors">Cancel</button>
               <button

@@ -36,6 +36,10 @@ export default function DashboardPage() {
   const [fundLoading, setFundLoading] = useState(false);
   const [fundError, setFundError]     = useState("");
   const [fundSuccess, setFundSuccess] = useState(false);
+  const [topUpMode, setTopUpMode]       = useState(false);
+  const [topUpAmount, setTopUpAmount]   = useState("");
+  const [topUpLoading, setTopUpLoading] = useState(false);
+  const [topUpError, setTopUpError]     = useState("");
   const [loading, setLoading]        = useState(true);
   const [error, setError]            = useState("");
 
@@ -77,6 +81,23 @@ export default function DashboardPage() {
       })
       .catch(() => setFundError('Reserve verification failed — the webhook may still process it'));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleTopUp() {
+    const amt = Number(topUpAmount);
+    if (isNaN(amt) || amt <= 0) { setTopUpError('Enter a positive amount'); return; }
+    setTopUpLoading(true);
+    setTopUpError('');
+    try {
+      const r = await adminApi.topUpReserve(amt);
+      setReserve(r.reserve);
+      setTopUpMode(false);
+      setTopUpAmount("");
+    } catch (e: unknown) {
+      setTopUpError(e instanceof Error ? e.message : 'Top-up failed');
+    } finally {
+      setTopUpLoading(false);
+    }
+  }
 
   async function handleFundReserve() {
     const amt = Number(fundAmount);
@@ -238,6 +259,33 @@ export default function DashboardPage() {
                   <X size={14} />
                 </button>
               </div>
+            ) : topUpMode ? (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-sm text-amber-400">₦</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={topUpAmount}
+                  onChange={(e) => { setTopUpAmount(e.target.value); setTopUpError(''); }}
+                  placeholder="e.g. 50000"
+                  autoFocus
+                  className="w-36 bg-surface-2 border border-amber-500/30 rounded-lg px-2 py-1 text-sm text-amber-300 outline-none focus:border-amber-500/60 placeholder:text-amber-500/30"
+                />
+                <button
+                  disabled={topUpLoading || !topUpAmount}
+                  onClick={handleTopUp}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 hover:bg-amber-500/30 disabled:opacity-50 text-xs font-bold transition-colors"
+                >
+                  {topUpLoading ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                  {topUpLoading ? "Adding…" : "Add"}
+                </button>
+                <button
+                  onClick={() => { setTopUpMode(false); setTopUpAmount(''); setTopUpError(''); }}
+                  className="p-1.5 rounded-lg bg-surface-2 border border-border text-muted hover:text-text transition-colors"
+                >
+                  <X size={14} />
+                </button>
+              </div>
             ) : fundMode ? (
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-sm text-amber-400">₦</span>
@@ -268,6 +316,7 @@ export default function DashboardPage() {
             ) : (
               <p className="text-xl font-black text-amber-300 mt-0.5">{fmtCurrency(reserve)}</p>
             )}
+            {topUpError && <p className="text-xs text-danger mt-1">{topUpError}</p>}
             {fundError && <p className="text-xs text-danger mt-1">{fundError}</p>}
             {fundSuccess && (
               <div className="flex items-center gap-1.5 text-xs text-success mt-1">
@@ -275,23 +324,33 @@ export default function DashboardPage() {
                 Reserve funded successfully
               </div>
             )}
-            {!reserveEdit && !fundMode && (
-              <p className="text-[10px] text-amber-400/40 mt-1">Seed pools from matchday pages</p>
+            {!reserveEdit && !fundMode && !topUpMode && (
+              <p className="text-[10px] text-amber-400/40 mt-1">
+                Top Up = manual testnet ledger bump · Fund = real Paystack payment (needs a live key)
+              </p>
             )}
           </div>
-          {!reserveEdit && !fundMode && (
+          {!reserveEdit && !fundMode && !topUpMode && (
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => { setReserveInput(String(reserve)); setReserveEdit(true); }}
                 className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 transition-colors"
-                title="Set reserve balance manually"
+                title="Set reserve balance manually (absolute override)"
               >
                 <Edit2 size={14} />
               </button>
               <button
+                onClick={() => { setTopUpMode(true); setTopUpError(''); }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 text-xs font-bold transition-colors"
+                title="Testnet: add an amount to the current reserve"
+              >
+                <Check size={13} />
+                Top Up
+              </button>
+              <button
                 onClick={() => { setFundMode(true); setFundError(''); }}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 text-xs font-bold transition-colors"
-                title="Fund reserve via Paystack"
+                title="Mainnet: fund reserve via real Paystack payment"
               >
                 <ExternalLink size={13} />
                 Fund
