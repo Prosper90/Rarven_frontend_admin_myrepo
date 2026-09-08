@@ -47,6 +47,12 @@ export default function ProAdminPage() {
   );
   const [skipRefresh, setSkipRefresh] = useState(true);
 
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [scheduleCount, setScheduleCount] = useState("4");
+  const [scheduleStartNumber, setScheduleStartNumber] = useState("");
+  const [scheduleStartFrom, setScheduleStartFrom] = useState("");
+  const [scheduleStartOpensAt, setScheduleStartOpensAt] = useState("");
+
   const [showConfig, setShowConfig] = useState(false);
   const [budgetCapDraft, setBudgetCapDraft] = useState("");
   const [multiplierDraft, setMultiplierDraft] = useState("");
@@ -82,6 +88,23 @@ export default function ProAdminPage() {
       setGwNumber(""); setOpensAt(""); setFromDate(""); setToDate("");
       load();
     } catch (e: unknown) { setError(e instanceof Error ? e.message : "Create failed"); }
+    finally { setBusy(null); }
+  }
+
+  async function handleSchedule() {
+    setBusy("schedule");
+    try {
+      await adminApi.batchCreateProGameweeks({
+        count: Number(scheduleCount),
+        startNumber: Number(scheduleStartNumber),
+        startFrom: scheduleStartFrom,
+        startOpensAt: scheduleStartOpensAt,
+        leagueIds,
+      });
+      setShowSchedule(false);
+      setScheduleCount("4"); setScheduleStartNumber(""); setScheduleStartFrom(""); setScheduleStartOpensAt("");
+      load();
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "Schedule failed"); }
     finally { setBusy(null); }
   }
 
@@ -199,6 +222,12 @@ export default function ProAdminPage() {
             className="px-3 py-2 rounded-xl bg-surface-3 border border-border text-xs font-semibold text-muted hover:text-text hover:border-primary/30 transition-colors flex items-center gap-1.5"
           >
             <Plus size={13} /> New Gameweek
+          </button>
+          <button
+            onClick={() => setShowSchedule(true)}
+            className="px-3 py-2 rounded-xl bg-surface-3 border border-border text-xs font-semibold text-muted hover:text-text hover:border-primary/30 transition-colors flex items-center gap-1.5"
+          >
+            <Plus size={13} /> Schedule Ahead
           </button>
         </div>
       </div>
@@ -389,6 +418,68 @@ export default function ProAdminPage() {
                 className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-bold disabled:opacity-50 hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"
               >
                 {busy === "create" ? <Loader2 size={14} className="animate-spin" /> : "Create"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Schedule Ahead — queue several upcoming gameweeks in one go */}
+      {showSchedule && (
+        <Modal title="Schedule Ahead" onClose={() => setShowSchedule(false)}>
+          <div className="flex flex-col gap-4">
+            <p className="text-[11px] text-faint">
+              Creates several upcoming gameweeks at once, one real week apart, so the app always
+              has something scheduled to show ahead of time. Each one still needs to be opened
+              manually when its week arrives.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-muted uppercase tracking-wider">How Many Weeks</label>
+                <input type="number" min={1} max={12} value={scheduleCount} onChange={(e) => setScheduleCount(e.target.value)}
+                  className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none focus:border-primary/50" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-muted uppercase tracking-wider">Starting Number</label>
+                <input type="number" value={scheduleStartNumber} onChange={(e) => setScheduleStartNumber(e.target.value)} placeholder="e.g. 5"
+                  className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none focus:border-primary/50" />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-muted uppercase tracking-wider">First Week Opens At</label>
+              <input type="datetime-local" value={scheduleStartOpensAt} onChange={(e) => setScheduleStartOpensAt(e.target.value)}
+                className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none [color-scheme:dark]" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-muted uppercase tracking-wider">First Week Fixtures From</label>
+              <input type="date" value={scheduleStartFrom} onChange={(e) => setScheduleStartFrom(e.target.value)}
+                className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none [color-scheme:dark]" />
+              <p className="text-[10px] text-faint">Each subsequent week automatically shifts everything by +7 days (a 7-day fixture window each time) — no need to enter later dates individually.</p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-muted uppercase tracking-wider">Leagues</label>
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                {LEAGUE_OPTIONS.map((l) => (
+                  <label key={l.id} className="flex items-center gap-1.5 text-xs text-muted cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={leagueIds.includes(l.id)}
+                      onChange={(e) => setLeagueIds((prev) => e.target.checked ? [...prev, l.id] : prev.filter((id) => id !== l.id))}
+                      className="accent-primary"
+                    />
+                    {l.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setShowSchedule(false)} className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold text-muted hover:text-text transition-colors">Cancel</button>
+              <button
+                onClick={handleSchedule}
+                disabled={!scheduleCount || !scheduleStartNumber || !scheduleStartFrom || !scheduleStartOpensAt || leagueIds.length === 0 || busy === "schedule"}
+                className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-bold disabled:opacity-50 hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"
+              >
+                {busy === "schedule" ? <Loader2 size={14} className="animate-spin" /> : "Schedule"}
               </button>
             </div>
           </div>

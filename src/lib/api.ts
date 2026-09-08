@@ -136,6 +136,8 @@ export const adminApi = {
     api.get<{ success: boolean; gameweeks: ProGameweek[] }>('/api/admin/pro/gameweeks'),
   createProGameweek: (data: { number: number; season?: string; opensAt: string; from: string; to: string; leagueIds?: number[] }) =>
     api.post<{ success: boolean; gameweek: ProGameweek }>('/api/admin/pro/gameweeks', data),
+  batchCreateProGameweeks: (data: { count: number; startNumber: number; startFrom: string; startOpensAt: string; season?: string; leagueIds?: number[] }) =>
+    api.post<{ success: boolean; gameweeks: ProGameweek[] }>('/api/admin/pro/gameweeks/batch', data),
   openProGameweek: (id: string, skipRefresh?: boolean) =>
     api.post<{ success: boolean; gameweek: ProGameweek }>(`/api/admin/pro/gameweeks/${id}/open`, { skipRefresh }),
   forceLockProGameweek: (id: string) =>
