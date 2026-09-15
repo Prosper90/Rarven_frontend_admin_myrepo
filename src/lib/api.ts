@@ -134,14 +134,22 @@ export const adminApi = {
   // FieldPort Pro — Market Manager
   listProGameweeks: () =>
     api.get<{ success: boolean; gameweeks: ProGameweek[] }>('/api/admin/pro/gameweeks'),
-  createProGameweek: (data: { number: number; season?: string; opensAt: string; from: string; to: string; leagueIds?: number[] }) =>
+  createProGameweek: (data: {
+    number: number; season?: string; opensAt: string; from?: string; to?: string;
+    leagueIds?: number[]; isBlackout?: boolean; competitionLabel?: string;
+  }) =>
     api.post<{ success: boolean; gameweek: ProGameweek }>('/api/admin/pro/gameweeks', data),
-  batchCreateProGameweeks: (data: { count: number; startNumber: number; startFrom: string; startOpensAt: string; season?: string; leagueIds?: number[] }) =>
+  batchCreateProGameweeks: (data: {
+    count: number; startNumber: number; startFrom: string; startOpensAt: string; season?: string;
+    leagueIds?: number[]; blackoutOffsets?: number[]; competitionLabel?: string;
+  }) =>
     api.post<{ success: boolean; gameweeks: ProGameweek[] }>('/api/admin/pro/gameweeks/batch', data),
   openProGameweek: (id: string, skipRefresh?: boolean) =>
     api.post<{ success: boolean; gameweek: ProGameweek }>(`/api/admin/pro/gameweeks/${id}/open`, { skipRefresh }),
   forceLockProGameweek: (id: string) =>
     api.patch<{ success: boolean; gameweek: ProGameweek }>(`/api/admin/pro/gameweeks/${id}/force-lock`, {}),
+  updateProGameweekMeta: (id: string, data: { isBlackout?: boolean; competitionLabel?: string | null }) =>
+    api.patch<{ success: boolean; gameweek: ProGameweek }>(`/api/admin/pro/gameweeks/${id}/meta`, data),
   recalculateProPricing: () =>
     api.post<{
       success: boolean;
@@ -369,6 +377,8 @@ export interface ProGameweek {
   opensAt: string;
   firstKickoffAt: string | null;
   status: 'upcoming' | 'open' | 'locked' | 'settling' | 'settled';
+  isBlackout: boolean;
+  competitionLabel: string | null;
   budgetCapSnapshot: number;
   pricingMultiplierSnapshot: number;
   poolTotal: number;

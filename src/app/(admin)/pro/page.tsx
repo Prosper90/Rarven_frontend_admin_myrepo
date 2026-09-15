@@ -24,6 +24,11 @@ const LEAGUE_OPTIONS = [
   { id: 78,  name: "Bundesliga",     default: false },
   { id: 135, name: "Serie A",        default: false },
   { id: 61,  name: "Ligue 1",        default: false },
+  // Champions League/Europa League fixtures reference the same underlying
+  // Player records as the domestic leagues above (same club players, no
+  // separate pricing needed) — safe to pull alongside them.
+  { id: 2,   name: "UEFA Champions League", default: false },
+  { id: 3,   name: "UEFA Europa League",    default: false },
 ];
 
 export default function ProAdminPage() {
@@ -46,12 +51,16 @@ export default function ProAdminPage() {
     LEAGUE_OPTIONS.filter((l) => l.default).map((l) => l.id),
   );
   const [skipRefresh, setSkipRefresh] = useState(true);
+  const [isBlackout, setIsBlackout] = useState(false);
+  const [competitionLabel, setCompetitionLabel] = useState("");
 
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduleCount, setScheduleCount] = useState("4");
   const [scheduleStartNumber, setScheduleStartNumber] = useState("");
   const [scheduleStartFrom, setScheduleStartFrom] = useState("");
   const [scheduleStartOpensAt, setScheduleStartOpensAt] = useState("");
+  const [scheduleBlackoutOffsets, setScheduleBlackoutOffsets] = useState<number[]>([]);
+  const [scheduleCompetitionLabel, setScheduleCompetitionLabel] = useState("");
 
   const [showConfig, setShowConfig] = useState(false);
   const [budgetCapDraft, setBudgetCapDraft] = useState("");
@@ -82,10 +91,15 @@ export default function ProAdminPage() {
     setBusy("create");
     try {
       await adminApi.createProGameweek({
-        number: Number(gwNumber), opensAt, from: fromDate, to: toDate, leagueIds,
+        number: Number(gwNumber), opensAt,
+        from: isBlackout ? undefined : fromDate,
+        to: isBlackout ? undefined : toDate,
+        leagueIds: isBlackout ? undefined : leagueIds,
+        isBlackout,
+        competitionLabel: competitionLabel || undefined,
       });
       setShowCreate(false);
-      setGwNumber(""); setOpensAt(""); setFromDate(""); setToDate("");
+      setGwNumber(""); setOpensAt(""); setFromDate(""); setToDate(""); setIsBlackout(false); setCompetitionLabel("");
       load();
     } catch (e: unknown) { setError(e instanceof Error ? e.message : "Create failed"); }
     finally { setBusy(null); }
@@ -100,9 +114,12 @@ export default function ProAdminPage() {
         startFrom: scheduleStartFrom,
         startOpensAt: scheduleStartOpensAt,
         leagueIds,
+        blackoutOffsets: scheduleBlackoutOffsets,
+        competitionLabel: scheduleCompetitionLabel || undefined,
       });
       setShowSchedule(false);
       setScheduleCount("4"); setScheduleStartNumber(""); setScheduleStartFrom(""); setScheduleStartOpensAt("");
+      setScheduleBlackoutOffsets([]); setScheduleCompetitionLabel("");
       load();
     } catch (e: unknown) { setError(e instanceof Error ? e.message : "Schedule failed"); }
     finally { setBusy(null); }
@@ -303,26 +320,33 @@ export default function ProAdminPage() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-border">
-              {["Gameweek", "Opens", "First Kickoff", "Status", "Pool", "Actions"].map((h) => (
+              {["Gameweek", "Opens", "First Kickoff", "Status", "Competition", "Pool", "Actions"].map((h) => (
                 <th key={h} className="px-5 py-3 text-left text-[10px] font-bold text-muted uppercase tracking-wider">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {loading && <tr><td colSpan={6} className="px-5 py-6 text-center text-sm text-muted">Loading…</td></tr>}
-            {!loading && gameweeks.length === 0 && <tr><td colSpan={6} className="px-5 py-6 text-center text-sm text-muted">No gameweeks yet.</td></tr>}
+            {loading && <tr><td colSpan={7} className="px-5 py-6 text-center text-sm text-muted">Loading…</td></tr>}
+            {!loading && gameweeks.length === 0 && <tr><td colSpan={7} className="px-5 py-6 text-center text-sm text-muted">No gameweeks yet.</td></tr>}
             {gameweeks.map((gw) => (
-              <tr key={gw._id} className="hover:bg-surface-2 transition-colors">
+              <tr key={gw._id} className={`hover:bg-surface-2 transition-colors ${gw.isBlackout ? "opacity-70" : ""}`}>
                 <td className="px-5 py-4 text-sm font-bold">
                   <a href={`/pro/${gw._id}`} className="text-text hover:text-primary transition-colors">#{gw.number}</a>
                 </td>
                 <td className="px-5 py-4 text-sm text-muted">{fmtDate(gw.opensAt)}</td>
                 <td className="px-5 py-4 text-sm text-muted">{gw.firstKickoffAt ? fmtDate(gw.firstKickoffAt) : "—"}</td>
                 <td className="px-5 py-4"><Badge label={gw.status} variant={STATUS_VARIANT[gw.status]} /></td>
+                <td className="px-5 py-4 text-sm text-muted">
+                  {gw.isBlackout ? (
+                    <span className="text-xs font-bold text-warning bg-warning/10 border border-warning/20 px-2 py-0.5 rounded-lg">International Break</span>
+                  ) : (
+                    gw.competitionLabel || "—"
+                  )}
+                </td>
                 <td className="px-5 py-4 text-sm text-text">{gw.status === "settled" ? fmtCurrency(gw.poolTotal) : "—"}</td>
                 <td className="px-5 py-4">
                   <div className="flex items-center gap-2">
-                    {gw.status === "upcoming" && (
+                    {gw.status === "upcoming" && !gw.isBlackout && (
                       <button
                         onClick={() => handleOpen(gw._id)}
                         disabled={busy === gw._id + "-open"}
@@ -381,40 +405,57 @@ export default function ProAdminPage() {
               <input type="datetime-local" value={opensAt} onChange={(e) => setOpensAt(e.target.value)}
                 className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none [color-scheme:dark]" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-muted uppercase tracking-wider">Fixtures From</label>
-                <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}
-                  className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none [color-scheme:dark]" />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-muted uppercase tracking-wider">Fixtures To</label>
-                <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)}
-                  className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none [color-scheme:dark]" />
-              </div>
-            </div>
+
+            <label className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none bg-warning/5 border border-warning/20 rounded-xl px-4 py-3">
+              <input type="checkbox" checked={isBlackout} onChange={(e) => setIsBlackout(e.target.checked)} className="accent-warning" />
+              International break — no club fixtures this week
+            </label>
+
+            {!isBlackout && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-muted uppercase tracking-wider">Fixtures From</label>
+                    <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}
+                      className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none [color-scheme:dark]" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-muted uppercase tracking-wider">Fixtures To</label>
+                    <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)}
+                      className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none [color-scheme:dark]" />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-muted uppercase tracking-wider">Leagues</label>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                    {LEAGUE_OPTIONS.map((l) => (
+                      <label key={l.id} className="flex items-center gap-1.5 text-xs text-muted cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={leagueIds.includes(l.id)}
+                          onChange={(e) => setLeagueIds((prev) => e.target.checked ? [...prev, l.id] : prev.filter((id) => id !== l.id))}
+                          className="accent-primary"
+                        />
+                        {l.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-muted uppercase tracking-wider">Leagues</label>
-              <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-                {LEAGUE_OPTIONS.map((l) => (
-                  <label key={l.id} className="flex items-center gap-1.5 text-xs text-muted cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={leagueIds.includes(l.id)}
-                      onChange={(e) => setLeagueIds((prev) => e.target.checked ? [...prev, l.id] : prev.filter((id) => id !== l.id))}
-                      className="accent-primary"
-                    />
-                    {l.name}
-                  </label>
-                ))}
-              </div>
+              <label className="text-xs font-semibold text-muted uppercase tracking-wider">Competition Label (optional)</label>
+              <input type="text" value={competitionLabel} onChange={(e) => setCompetitionLabel(e.target.value)} placeholder="e.g. Champions League Week"
+                className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none focus:border-primary/50" />
             </div>
+
             <p className="text-[10px] text-faint">Only pull leagues whose players are actually priced (check the roster progress bar on the Players page) — fixtures from an unpriced league just waste API quota. Premier League only until more leagues are priced.</p>
             <div className="flex gap-3">
               <button onClick={() => setShowCreate(false)} className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold text-muted hover:text-text transition-colors">Cancel</button>
               <button
                 onClick={handleCreate}
-                disabled={!gwNumber || !opensAt || !fromDate || !toDate || leagueIds.length === 0 || busy === "create"}
+                disabled={!gwNumber || !opensAt || (!isBlackout && (!fromDate || !toDate || leagueIds.length === 0)) || busy === "create"}
                 className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-bold disabled:opacity-50 hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"
               >
                 {busy === "create" ? <Loader2 size={14} className="animate-spin" /> : "Create"}
@@ -472,6 +513,37 @@ export default function ProAdminPage() {
                 ))}
               </div>
             </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-muted uppercase tracking-wider">Competition Label (optional)</label>
+              <input type="text" value={scheduleCompetitionLabel} onChange={(e) => setScheduleCompetitionLabel(e.target.value)} placeholder="e.g. Champions League Week"
+                className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none focus:border-primary/50" />
+            </div>
+
+            {scheduleStartFrom && Number(scheduleCount) > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-muted uppercase tracking-wider">International Breaks</label>
+                <div className="flex flex-col gap-1">
+                  {Array.from({ length: Number(scheduleCount) }).map((_, i) => {
+                    const weekDate = new Date(new Date(scheduleStartFrom).getTime() + i * 7 * 24 * 60 * 60 * 1000);
+                    const checked = scheduleBlackoutOffsets.includes(i);
+                    return (
+                      <label key={i} className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => setScheduleBlackoutOffsets((prev) =>
+                            e.target.checked ? [...prev, i] : prev.filter((n) => n !== i))}
+                          className="accent-warning"
+                        />
+                        Week {i + 1} — {weekDate.toLocaleDateString("en-NG", { day: "numeric", month: "short" })}
+                        {checked && <span className="text-warning font-semibold">International break</span>}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-3">
               <button onClick={() => setShowSchedule(false)} className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold text-muted hover:text-text transition-colors">Cancel</button>
               <button
