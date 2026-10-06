@@ -9,11 +9,11 @@ import BrandName from "@/components/BrandName";
 export default function LoginPage() {
   const router = useRouter();
 
-  const [email, setEmail]     = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError]     = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [ready, setReady]     = useState(false); // true once client has checked localStorage
+  const [ready, setReady] = useState(false); // true once client has checked localStorage
 
   // Skip the login page if already authed â€” runs only on client
   useEffect(() => {
@@ -47,20 +47,32 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex items-center gap-3 mb-8">
-          <Image src="/logox.png" alt="raRVen" width={84} height={28} className="h-auto w-auto" />
+          <Image
+            src="/logox.png"
+            alt="raRVen"
+            width={84}
+            height={28}
+            className="h-auto w-auto"
+          />
           <div>
-            <BrandName className="text-lg font-black text-text" />
-            <p className="text-[10px] text-faint uppercase tracking-[0.15em]">Admin Console</p>
+            {/* <BrandName className="text-lg font-black text-text" /> */}
+            <p className="text-[10px] text-faint uppercase tracking-[0.15em]">
+              Admin Console
+            </p>
           </div>
         </div>
 
         <div className="bg-surface border border-border rounded-2xl p-6">
           <h1 className="text-base font-bold text-text mb-1">Sign in</h1>
-          <p className="text-xs text-muted mb-6">Enter your admin credentials to continue.</p>
+          <p className="text-xs text-muted mb-6">
+            Enter your admin credentials to continue.
+          </p>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-muted uppercase tracking-wider">Email</label>
+              <label className="text-xs font-semibold text-muted uppercase tracking-wider">
+                Email
+              </label>
               <input
                 type="email"
                 value={email}
@@ -73,7 +85,9 @@ export default function LoginPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-muted uppercase tracking-wider">Password</label>
+              <label className="text-xs font-semibold text-muted uppercase tracking-wider">
+                Password
+              </label>
               <input
                 type="password"
                 value={password}
