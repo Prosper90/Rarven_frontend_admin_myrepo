@@ -275,7 +275,7 @@ export default function ProAdminPage() {
               <div>
                 <p className="text-xs text-muted">Currently Leading</p>
                 <p className="text-sm font-bold text-text mt-0.5">
-                  {overview.leader ? overview.leader.name : "—"}
+                  {overview.leader ? overview.leader.username : "—"}
                 </p>
                 <p className="text-[11px] text-faint">
                   {overview.leader
@@ -576,7 +576,7 @@ export default function ProAdminPage() {
               <input type="number" defaultValue={config?.pricingMultiplier} onChange={(e) => setMultiplierDraft(e.target.value)} placeholder={String(config?.pricingMultiplier ?? "")}
                 className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none focus:border-primary/50" />
             </div>
-            <p className="text-[10px] text-faint">Price (USDC) = Player Score (0-10) × multiplier. Squad purchases are real money — a user&apos;s wallet balance is the only real spending limit. The reference budget below is just a display figure (e.g. for house-account seeding), no longer enforced on real purchases.</p>
+            <p className="text-[10px] text-faint">Price (USDC) = Player Score (0-10) × multiplier, clamped to the $3–$200 range — the multiplier only shapes the spread inside that range. Squad purchases are real money — a user&apos;s wallet balance is the only real spending limit. The reference budget below is just a display figure (e.g. for house-account seeding), no longer enforced on real purchases.</p>
             <div className="flex gap-3">
               <button onClick={() => setShowConfig(false)} className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold text-muted hover:text-text transition-colors">Cancel</button>
               <button
@@ -625,7 +625,7 @@ export default function ProAdminPage() {
                 </button>
               )}
             </div>
-            <p className="text-[10px] text-faint">Settlement ingests match ratings, scores every squad, splits 50/30/20 of the 90% distributable pool, and updates season standings. Redistribute is a safe retry if a payout partially failed.</p>
+            <p className="text-[10px] text-faint">Settlement ingests match ratings, scores every squad, splits the pool by the tie-aware rules (no tie 45/27/18; ties share evenly, house keeps more), and updates season standings. Redistribute is a safe retry if a payout partially failed.</p>
           </div>
         </Modal>
       )}

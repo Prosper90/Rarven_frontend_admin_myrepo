@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { adminApi, Matchday, MatchdayRecord, PlatformStats, type Player } from "@/lib/api";
+import { adminApi, Matchday, MatchdayRecord, PlatformStats, PoolsOverview, type Player } from "@/lib/api";
 import { getAdminInfo } from "@/lib/auth";
 import StatCard from "@/components/StatCard";
 import Badge from "@/components/Badge";
@@ -24,6 +24,7 @@ export default function DashboardPage() {
   const canSeeRevenue = admin?.role === "superadmin" || admin?.role === "pool_manager";
 
   const [stats, setStats]           = useState<PlatformStats | null>(null);
+  const [pools, setPools]           = useState<({ success: boolean } & PoolsOverview) | null>(null);
   const [matchweeks, setMatchweeks]  = useState<Matchday[]>([]);
   const [matchdays, setMatchdays]    = useState<MatchdayRecord[]>([]);
   const [players, setPlayers]        = useState<Player[]>([]);
@@ -50,12 +51,16 @@ export default function DashboardPage() {
       isSuperadmin
         ? adminApi.getReserve().catch(() => null)
         : Promise.resolve(null),
-    ]).then(([s, mw, md, p, r]) => {
-      if (s) setStats({ totalUsers: s.totalUsers, usersByRegion: s.usersByRegion, revenue: s.revenue });
+      isSuperadmin
+        ? adminApi.poolsOverview().catch(() => null)
+        : Promise.resolve(null),
+    ]).then(([s, mw, md, p, r, pl]) => {
+      if (s) setStats({ totalUsers: s.totalUsers, usersByWallet: s.usersByWallet, revenue: s.revenue });
       setMatchweeks(mw.matchweeks ?? []);
       setMatchdays(md.matchdays ?? []);
       setPlayers(p.players ?? []);
       if (r) setReserve(r.reserve);
+      if (pl) setPools(pl);
     }).catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [canSeeRevenue]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -93,7 +98,13 @@ export default function DashboardPage() {
   const liveWeek     = matchweeks.find((m) => m.liveActive);
   const liveDay      = matchdays.find((m)  => m.liveActive);
   const activePlayers = players.filter((p) => p.isActive).length;
-  const topRegions   = stats?.usersByRegion.sort((a, b) => b.count - a.count).slice(0, 5) ?? [];
+  // Two buckets only — has a signing wallet or doesn't — so there's nothing
+  // to rank. The 'none' bucket is house accounts, which is what makes this
+  // worth showing: it's the bot-vs-human split.
+  const walletSplit    = stats?.usersByWallet ?? [];
+  const connectedCount = walletSplit.find((b) => b._id === "connected")?.count ?? 0;
+  const funding        = pools?.funding ?? [];
+  const short          = funding.filter((f) => f.state === "short");
 
   // Most relevant open session for "Today" card
   const todayWeek = matchweeks.find((m) => m.status === "open");
@@ -145,12 +156,12 @@ export default function DashboardPage() {
 
       {/* Stat strip */}
       <div className={`grid gap-4 ${canSeeRevenue ? "grid-cols-4" : "grid-cols-3"}`}>
-        <StatCard label="Total Users"    value={stats?.totalUsers ?? "—"}   sub="All regions"              accent="primary" />
+        <StatCard label="Total Users"    value={stats?.totalUsers ?? "—"}   sub="All accounts"            accent="primary" />
         <StatCard label="Open Sessions"  value={openWeeks + openDays}        sub={`${openWeeks}w · ${openDays}d active`} accent="success" />
         {canSeeRevenue && (
           <StatCard label="Active Players" value={activePlayers}             sub="In roster"                accent="info" />
         )}
-        <StatCard label="Regions Live"   value={stats?.usersByRegion.length ?? "—"} sub="Countries"        accent="warning" />
+        <StatCard label="Wallets"        value={stats ? connectedCount : "—"} sub="Signed in with a wallet" accent="warning" />
       </div>
 
       {/* Money cards. Not deposits/withdrawals — raRVen is non-custodial, so
@@ -181,6 +192,137 @@ export default function DashboardPage() {
             <p className="text-xl font-black text-text mt-1">{fmtCurrency(stats.revenue.totalWallets)}</p>
             <p className="text-[10px] text-faint mt-1">Not real money</p>
           </div>
+        </div>
+      )}
+
+      {/* Pools — what each chain's prize contract actually holds.
+          Built as an aggregate now rather than when chain #2 arrives, so the
+          shape never changes: the table just gains a row. A chain that could
+          not be read shows as degraded, never as $0 — an unreachable RPC is
+          unknown, not empty, and counting it as zero would understate what we
+          owe to winners. */}
+      {pools && (
+        <div className="bg-surface border border-border rounded-2xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+            <div>
+              <p className="text-sm font-bold text-text">Pools</p>
+              <p className="text-xs text-muted mt-0.5">Balance held by each chain's prize contract</p>
+            </div>
+            <p className="text-xl font-black text-success">{fmtCurrency(pools.total)}</p>
+          </div>
+
+          {/* The one thing on this panel that wants an operator to act. Shown
+              above the table rather than as a column colour, because a funding
+              gap is the difference between winners getting paid this week and
+              not — a tinted row is too easy to scroll past. */}
+          {short.length > 0 && (
+            <div className="px-5 py-3 bg-danger/10 border-b border-danger/20 flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span className="text-xs font-bold text-danger uppercase tracking-wider">Pool needs topping up</span>
+              {short.map((f) => (
+                <span key={f.network} className="text-xs text-text">
+                  <span className="font-bold text-danger">{f.displayName}</span> is short{' '}
+                  <span className="font-bold text-danger">{fmtCurrency(f.shortfall ?? 0)}</span>
+                  <span className="text-muted"> — owes {fmtCurrency(f.pendingEscrow)}, treasury holds {f.treasuryBalance === null ? '—' : fmtCurrency(f.treasuryBalance)}</span>
+                </span>
+              ))}
+              <span className="text-[10px] text-muted">Winners cannot be paid until this clears.</span>
+            </div>
+          )}
+
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border">
+                {["Chain", "Pool held", "Treasury", "Contract", "Signer", "Status"].map((h) => (
+                  <th key={h} className="px-5 py-3 text-left text-[10px] font-bold text-muted uppercase tracking-wider">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {pools.chains.map((c) => {
+                // Full fallback, not a partial one: a missing row would mean the
+                // server skipped this chain, which we must not render as "funded".
+                const fund = funding.find((f) => f.network === c.network) ?? {
+                  network: c.network, displayName: c.displayName,
+                  treasuryAddress: c.treasuryAddress, treasuryBalance: c.treasuryBalance,
+                  pendingEscrow: 0, shortfall: null, state: "unknown" as const,
+                  reason: "No funding row returned for this chain.",
+                };
+                return (
+                <tr key={c.network} className="hover:bg-surface-2">
+                  <td className="px-5 py-3">
+                    <span className="text-sm font-bold text-text">{c.displayName}</span>
+                    {c.primary && (
+                      <span className="ml-2 text-[9px] font-bold uppercase tracking-wider text-primary bg-primary/10 border border-primary/20 rounded px-1.5 py-0.5">active</span>
+                    )}
+                    {c.isTestnet && (
+                      <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded px-1.5 py-0.5">testnet</span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3 text-sm font-bold text-success">
+                    {c.totalBalance === null ? <span className="text-faint">—</span> : fmtCurrency(c.totalBalance)}
+                  </td>
+                  {/* Treasury, not pool: this is what escrow can still draw on.
+                      Null is rendered as an em dash and never as $0 — we didn't
+                      confirm the chain is empty, we failed to ask it. */}
+                  <td className="px-5 py-3">
+                    <span className={`text-sm font-semibold ${fund.state === "short" ? "text-danger" : "text-text"}`}>
+                      {c.treasuryBalance === null ? <span className="text-faint">—</span> : fmtCurrency(c.treasuryBalance)}
+                    </span>
+                    {fund.state === "short" && (
+                      <p className="text-[10px] font-bold text-danger mt-0.5">short {fmtCurrency(fund.shortfall ?? 0)}</p>
+                    )}
+                    {fund.state === "unknown" && fund.reason && (
+                      <p className="text-[10px] text-faint mt-0.5 max-w-[16rem] truncate" title={fund.reason}>unknown</p>
+                    )}
+                  </td>
+                  <td className="px-5 py-3 text-xs font-mono text-muted" title={c.address}>
+                    {c.address.slice(0, 8)}…{c.address.slice(-6)}
+                  </td>
+                  <td className={`px-5 py-3 text-xs font-semibold ${c.signerConfigured ? "text-success" : "text-warning"}`}>
+                    {c.signerConfigured ? "ready" : "no key"}
+                  </td>
+                  <td className="px-5 py-3">
+                    <span className={`text-xs font-semibold ${c.healthy ? "text-success" : "text-danger"}`}>
+                      {c.healthy ? "● healthy" : "● degraded"}
+                    </span>
+                    {!c.healthy && c.error && (
+                      <p className="text-[10px] text-faint mt-0.5 max-w-[22rem] truncate" title={c.error}>{c.error}</p>
+                    )}
+                  </td>
+                </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-border bg-surface-2">
+                <td className="px-5 py-3 text-[10px] font-bold text-muted uppercase tracking-wider">Total</td>
+                <td className="px-5 py-3 text-sm font-black text-success">{fmtCurrency(pools.total)}</td>
+                <td colSpan={4} className="px-5 py-3 text-xs text-muted">
+                  {pools.chains.filter((c) => c.healthy).length} of {pools.chains.length} chain{pools.chains.length === 1 ? "" : "s"} read
+                  {pools.degraded.length > 0 && (
+                    <span className="text-warning"> · total is a floor, not a fact</span>
+                  )}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+
+          {/* Reconciliation — the database figure beside the chain figures.
+              Once escrow lands, `distributable` should match this pool's row
+              to the cent, and if it doesn't the table above is where to look. */}
+          {pools.current && (
+            <div className="px-5 py-3 border-t border-border flex flex-wrap items-center gap-x-6 gap-y-1">
+              <p className="text-[10px] font-bold text-muted uppercase tracking-wider">Gameweek {pools.current.number}</p>
+              <span className="text-xs font-semibold capitalize text-text">{pools.current.status}</span>
+              <span className="text-xs text-muted">
+                pot <span className="font-bold text-text">{fmtCurrency(pools.current.poolTotal)}</span>
+              </span>
+              <span className="text-xs text-muted">
+                escrow <span className="font-bold text-success">{fmtCurrency(pools.current.distributable)}</span>
+                <span className="text-faint"> (house {fmtCurrency(pools.current.houseCut)})</span>
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -346,22 +488,25 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Users by region */}
+        {/* Wallet adoption — 'none' is house accounts, so this doubles as
+            a bot-vs-human read on the user base. */}
         <div className="bg-surface border border-border rounded-2xl p-5">
-          <p className="text-sm font-bold text-text mb-4">Users by Region</p>
-          {topRegions.length === 0 ? (
+          <p className="text-sm font-bold text-text mb-4">Wallets Connected</p>
+          {walletSplit.length === 0 ? (
             <p className="text-sm text-muted text-center py-4">No users yet.</p>
           ) : (
             <div className="flex flex-col gap-2">
-              {topRegions.map((r) => {
-                const pct = stats ? Math.round((r.count / stats.totalUsers) * 100) : 0;
+              {walletSplit.map((b) => {
+                const pct = stats ? Math.round((b.count / stats.totalUsers) * 100) : 0;
                 return (
-                  <div key={r._id} className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-text w-8">{r._id}</span>
+                  <div key={b._id} className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-text w-20">
+                      {b._id === "connected" ? "Connected" : "No wallet"}
+                    </span>
                     <div className="flex-1 bg-surface-3 rounded-full h-1.5">
                       <div className="bg-primary h-full rounded-full" style={{ width: `${pct}%` }} />
                     </div>
-                    <span className="text-xs text-muted w-12 text-right">{r.count.toLocaleString()}</span>
+                    <span className="text-xs text-muted w-12 text-right">{b.count.toLocaleString()}</span>
                   </div>
                 );
               })}

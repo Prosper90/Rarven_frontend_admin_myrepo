@@ -108,7 +108,7 @@ export default function ProGameweekDetailPage({ params }: { params: Promise<{ id
       <div className="grid grid-cols-3 gap-4">
         <StatCard
           label="Currently Leading"
-          value={detail.leader ? detail.leader.name : "—"}
+          value={detail.leader ? detail.leader.username : "—"}
           sub={detail.leader
             ? `${detail.leader.score.toFixed(1)} pts${detail.leaderSource === "live" ? " · live" : ""}`
             : gw.status === "settled" ? "No scored squads" : "Not scored yet"}
@@ -186,7 +186,7 @@ export default function ProGameweekDetailPage({ params }: { params: Promise<{ id
                   {s.rank === 1 ? <Crown size={13} className="text-warning inline mr-1" /> : null}
                   #{s.rank ?? i + 1}
                 </td>
-                <td className="px-5 py-3.5 text-sm font-semibold text-text">{s.name}</td>
+                <td className="px-5 py-3.5 text-sm font-semibold text-text">{s.username}</td>
                 <td className="px-5 py-3.5 text-sm text-text tabular-nums">{s.score.toFixed(1)}</td>
               </tr>
             ))}

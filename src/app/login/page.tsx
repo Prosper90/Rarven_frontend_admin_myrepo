@@ -48,7 +48,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="flex items-center gap-3 mb-8">
           <Image
-            src="/logox.png"
+            src="/logoy.png"
             alt="raRVen"
             width={84}
             height={28}

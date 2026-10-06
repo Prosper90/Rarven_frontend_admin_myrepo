@@ -28,8 +28,9 @@ const OUTCOME_TONE: Record<OnChainAdvanceOutcome, "ok" | "info" | "warn"> = {
   "awaiting-lock": "info",
   "awaiting-settle": "info",
   "not-configured": "info",
-  // The one state that wants an operator to do something.
+  // The states that want an operator to do something.
   "waiting-wallets": "warn",
+  "awaiting-topup": "warn",
 };
 
 const OUTCOME_LABEL: Record<OnChainAdvanceOutcome, string> = {
@@ -39,6 +40,7 @@ const OUTCOME_LABEL: Record<OnChainAdvanceOutcome, string> = {
   "up-to-date": "Up to date",
   "awaiting-lock": "Awaiting lock",
   "awaiting-settle": "Awaiting settlement",
+  "awaiting-topup": "Pool needs top-up",
   "not-configured": "Not configured",
   "waiting-wallets": "Waiting on wallets",
 };

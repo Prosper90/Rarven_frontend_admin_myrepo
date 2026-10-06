@@ -1,13 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
-import { adminApi, AdminUser, PromoCredit } from "@/lib/api";
+import { adminApi, AdminUser, PlatformStats, PromoCredit } from "@/lib/api";
 import { getAdminInfo } from "@/lib/auth";
 import Badge from "@/components/Badge";
 import StatCard from "@/components/StatCard";
 import { Gift, Search, Loader2, CheckCircle } from "lucide-react";
 
-const REGIONS = ["ALL","NG","GB","US","GH","KE","ZA","UG"];
-
+// Region filters went with the old signup form. Search is server-side now:
+// the backend's `q` matches an exact username, a 0x wallet address, or an
+// ObjectId — which is also why there are no filter chips left to offer.
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" });
 }
@@ -29,11 +30,11 @@ export default function UsersPage() {
   const [total, setTotal]     = useState(0);
   const [pages, setPages]     = useState(1);
   const [page, setPage]       = useState(1);
-  const [region, setRegion]   = useState("ALL");
-  const [search, setSearch]   = useState("");
+  const [query, setQuery]         = useState("");  // what's in the input
+  const [appliedQuery, setApplied] = useState(""); // debounced — drives the fetch
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState("");
-  const [stats, setStats]     = useState<{ _id: string; count: number }[]>([]);
+  const [stats, setStats]     = useState<PlatformStats["usersByWallet"]>([]);
 
   // Credit form state
   const [identifier, setIdentifier] = useState("");
@@ -47,24 +48,43 @@ export default function UsersPage() {
   const [credits, setCredits]         = useState<PromoCredit[]>([]);
   const [creditsLoading, setCreditsLoading] = useState(false);
 
+  // Debounce so typing a wallet address doesn't fire a request per keystroke,
+  // and reset to page 1 — keeping the old page number would land past the end
+  // of a much smaller result set.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setApplied(query.trim());
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // The list itself. Depends on the *debounced* query, not the raw input.
   useEffect(() => {
     load();
+  }, [page, appliedQuery]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Wallet split, fetched once — paging the table below doesn't change it.
+  useEffect(() => {
     adminApi.stats()
-      .then((s) => setStats(s.usersByRegion ?? []))
+      .then((s) => setStats(s.usersByWallet ?? []))
       .catch(() => {});
-    if (canCredit) {
-      setCreditsLoading(true);
-      adminApi.listPromoCredits()
-        .then((r) => setCredits(r.credits))
-        .catch(() => {})
-        .finally(() => setCreditsLoading(false));
-    }
-  }, [page, region]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Credit history, likewise loaded once.
+  useEffect(() => {
+    if (!canCredit) return;
+    setCreditsLoading(true);
+    adminApi.listPromoCredits()
+      .then((r) => setCredits(r.credits))
+      .catch(() => {})
+      .finally(() => setCreditsLoading(false));
+  }, [canCredit]);
 
   async function load() {
     setLoading(true);
     try {
-      const res = await adminApi.listUsers({ region: region === "ALL" ? undefined : region, page });
+      const res = await adminApi.listUsers({ q: appliedQuery || undefined, page });
       setUsers(res.users ?? []);
       setTotal(res.total ?? 0);
       setPages(res.pages ?? 1);
@@ -75,7 +95,7 @@ export default function UsersPage() {
 
   async function handleToggleStatus(u: AdminUser) {
     const action = u.isActive ? "suspend" : "reactivate";
-    if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} ${u.name}? ${u.isActive ? "They will be unable to log in." : ""}`)) return;
+    if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} ${u.username}? ${u.isActive ? "They will be unable to log in." : ""}`)) return;
     try {
       await adminApi.updateUserStatus(u._id, !u.isActive);
       load();
@@ -94,7 +114,7 @@ export default function UsersPage() {
     setCreditSuccess(null);
     try {
       const res = await adminApi.creditUser(identifier.trim(), amount, creditNote.trim() || undefined);
-      setCreditSuccess({ name: res.user.name, amount });
+      setCreditSuccess({ name: res.user.username, amount });
       setIdentifier("");
       setCreditAmount("");
       setCreditNote("");
@@ -106,27 +126,33 @@ export default function UsersPage() {
     } finally { setCrediting(false); }
   }
 
-  const filtered = search
-    ? users.filter((u) => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()))
-    : users;
-
-  const regionCounts = stats.sort((a, b) => b.count - a.count);
+  // Search and paging are both server-side (see `appliedQuery` above), so
+  // this is the page as the backend returned it — filtering it here would
+  // only ever search the current 50 rows and silently ignore everyone else.
+  const walletSplit = stats;
 
   return (
     <div className="p-8 flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-black text-text">Users</h1>
-        <p className="text-sm text-muted mt-0.5">{total.toLocaleString()} registered users across all regions</p>
+        <p className="text-sm text-muted mt-0.5">
+          {total.toLocaleString()} accounts{appliedQuery ? ` matching “${appliedQuery}”` : ""}
+        </p>
       </div>
 
-      {/* Region breakdown */}
+      {/* Wallet split — 'none' is house accounts. */}
       <div className="grid grid-cols-5 gap-4">
-        {regionCounts.slice(0, 5).map((r) => (
-          <StatCard key={r._id} label={r._id} value={r.count.toLocaleString()} accent="primary" />
+        {walletSplit.slice(0, 5).map((r) => (
+          <StatCard
+            key={r._id}
+            label={r._id === "connected" ? "Wallet connected" : "No wallet"}
+            value={r.count.toLocaleString()}
+            accent="primary"
+          />
         ))}
-        {regionCounts.length === 0 && (
+        {walletSplit.length === 0 && (
           <div className="col-span-5">
-            <p className="text-sm text-muted">No region data available.</p>
+            <p className="text-sm text-muted">No wallet data available.</p>
           </div>
         )}
       </div>
@@ -138,7 +164,7 @@ export default function UsersPage() {
             <Gift size={15} className="text-primary" />
             <div>
               <p className="text-sm font-bold text-text">Issue Promo Credit</p>
-              <p className="text-xs text-muted mt-0.5">Credit a user from the platform reserve. Look them up by phone number, email, referral code, or User ID.</p>
+              <p className="text-xs text-muted mt-0.5">Credit a user from the platform reserve. Look them up by username, wallet address, referral code, or User ID.</p>
             </div>
           </div>
 
@@ -146,13 +172,13 @@ export default function UsersPage() {
             <div className="grid grid-cols-3 gap-3">
               {/* Identifier */}
               <div className="col-span-1 flex flex-col gap-1.5">
-                <label className="text-[10px] font-semibold text-muted uppercase tracking-wider">User ID / Email / Referral Code</label>
+                <label className="text-[10px] font-semibold text-muted uppercase tracking-wider">Username / Wallet / Referral Code</label>
                 <div className="relative flex items-center">
                   <Search size={13} className="absolute left-3 text-faint pointer-events-none" />
                   <input
                     value={identifier}
                     onChange={(e) => { setIdentifier(e.target.value); setCreditError(""); setCreditSuccess(null); }}
-                    placeholder="e.g. 08012345678, email, or referral code"
+                    placeholder="e.g. striker99, 0xabc…, or referral code"
                     required
                     className="w-full bg-surface-2 border border-border rounded-xl pl-8 pr-4 py-2.5 text-sm text-text outline-none focus:border-primary/50 placeholder:text-faint font-mono"
                   />
@@ -221,7 +247,7 @@ export default function UsersPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
-                    {["User", "Email", "Amount", "Note", "Date"].map((h) => (
+                    {["User", "Referral", "Amount", "Note", "Date"].map((h) => (
                       <th key={h} className="px-5 py-2 text-left text-[10px] font-bold text-muted uppercase tracking-wider">{h}</th>
                     ))}
                   </tr>
@@ -231,8 +257,8 @@ export default function UsersPage() {
                     const u = typeof c.user === "object" ? c.user : null;
                     return (
                       <tr key={c._id} className="hover:bg-surface-2 transition-colors">
-                        <td className="px-5 py-3 text-sm font-semibold text-text">{u?.name ?? "—"}</td>
-                        <td className="px-5 py-3 text-xs text-muted">{u?.email ?? "—"}</td>
+                        <td className="px-5 py-3 text-sm font-semibold text-text">{u?.username ?? "—"}</td>
+                        <td className="px-5 py-3 text-xs text-muted font-mono">{u?.referralCode ?? "—"}</td>
                         <td className="px-5 py-3 text-sm font-bold text-success">+${c.amount.toLocaleString()}</td>
                         <td className="px-5 py-3 text-xs text-muted max-w-[200px] truncate">{c.description}</td>
                         <td className="px-5 py-3 text-xs text-faint">
@@ -249,25 +275,26 @@ export default function UsersPage() {
       )}
 
       {/* ── Users Table ────────────────────────────────────────────────────── */}
-      {/* Filters */}
+      {/* Filters — search only. It goes to the server on a 350ms debounce, so
+          a wallet address matches on any page, not just this one. */}
       <div className="flex items-center gap-3">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search name or email…"
-          className="bg-surface border border-border rounded-xl px-4 py-2.5 text-sm text-text outline-none focus:border-primary/50 placeholder:text-faint w-64"
-        />
-        <div className="flex gap-1.5">
-          {REGIONS.map((r) => (
-            <button
-              key={r}
-              onClick={() => { setRegion(r); setPage(1); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${region === r ? "bg-primary/10 border-primary/30 text-primary" : "bg-surface border-border text-muted hover:text-text"}`}
-            >
-              {r}
-            </button>
-          ))}
+        <div className="relative flex items-center">
+          <Search size={14} className="absolute left-3 text-faint pointer-events-none" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search username, wallet, or ID…"
+            className="bg-surface border border-border rounded-xl pl-9 pr-4 py-2.5 text-sm text-text outline-none focus:border-primary/50 placeholder:text-faint w-80"
+          />
         </div>
+        {query && (
+          <button
+            onClick={() => setQuery("")}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-surface border border-border text-muted hover:text-text transition-colors"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {error && <p className="text-xs text-danger">{error}</p>}
@@ -276,29 +303,33 @@ export default function UsersPage() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-border">
-              {["Name", "Email", "Phone", "Region", "Currency", "Balance", "Status", "Joined", "ID"].map((h) => (
+              {["Username", "Wallet", "Network", "Referral", "Currency", "Balance", "Status", "Joined", "ID"].map((h) => (
                 <th key={h} className="px-5 py-3 text-left text-[10px] font-bold text-muted uppercase tracking-wider">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {loading && <tr><td colSpan={9} className="px-5 py-8 text-center text-sm text-muted">Loading…</td></tr>}
-            {!loading && filtered.length === 0 && <tr><td colSpan={9} className="px-5 py-8 text-center text-sm text-muted">No users found.</td></tr>}
-            {filtered.map((u) => (
+            {!loading && users.length === 0 && <tr><td colSpan={9} className="px-5 py-8 text-center text-sm text-muted">No users found.</td></tr>}
+            {users.map((u) => (
               <tr key={u._id} className="hover:bg-surface-2 transition-colors">
                 <td className="px-5 py-4">
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-full bg-surface-3 border border-border flex items-center justify-center text-[10px] font-black text-muted shrink-0">
-                      {u.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                      {u.username.slice(0, 2).toUpperCase()}
                     </div>
-                    <p className="text-sm font-semibold text-text">{u.name}</p>
+                    <p className="text-sm font-semibold text-text">{u.username}</p>
                   </div>
                 </td>
-                <td className="px-5 py-4 text-xs text-muted">{u.email}</td>
-                <td className="px-5 py-4 text-xs text-muted font-mono">{u.phone ?? <span className="text-faint">—</span>}</td>
-                <td className="px-5 py-4">
-                  <span className="text-xs font-bold text-text bg-surface-3 border border-border px-2 py-0.5 rounded">{u.region}</span>
+                <td className="px-5 py-4 text-xs text-muted font-mono">
+                  {u.walletAddress ? (
+                    <span title={u.walletAddress}>{u.walletAddress.slice(0, 10)}…{u.walletAddress.slice(-6)}</span>
+                  ) : (
+                    <span className="text-faint">house — none</span>
+                  )}
                 </td>
+                <td className="px-5 py-4 text-xs text-muted">{u.walletNetwork ?? <span className="text-faint">—</span>}</td>
+                <td className="px-5 py-4 text-xs text-muted font-mono">{u.referralCode}</td>
                 <td className="px-5 py-4 text-xs text-faint">USDC</td>
                 <td className="px-5 py-4 text-sm font-semibold text-primary">{fmtCurrency(u.walletBalance)}</td>
                 <td className="px-5 py-4">

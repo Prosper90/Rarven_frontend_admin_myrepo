@@ -45,6 +45,11 @@ export const adminApi = {
   stats: () =>
     api.get<{ success: boolean } & PlatformStats>('/api/admin/stats'),
 
+  // Multi-chain pool balances — one row per configured RavenPrizePool
+  // deployment, plus a summed total.
+  poolsOverview: () =>
+    api.get<{ success: boolean } & PoolsOverview>('/api/admin/pools/overview'),
+
   // Players
   listPlayers:   () => api.get<{ success: boolean; players: Player[] }>('/api/admin/players'),
   createPlayer:  (data: Partial<Player> & { apiFootballId?: number | null }) =>
@@ -206,11 +211,13 @@ export const adminApi = {
     ),
 
   // Users
-  listUsers: (params?: { region?: string; page?: number }) => {
+  // `q` is the backend's free-text search: an exact username, a 0x wallet
+  // address, or a 24-char ObjectId. Region went with the old signup form.
+  listUsers: (params?: { q?: string; page?: number }) => {
     const qs = new URLSearchParams();
-    if (params?.region) qs.set('region', params.region);
-    if (params?.page)   qs.set('page', String(params.page));
-    return api.get<{ success: boolean; users: AdminUser[]; total: number; pages: number }>(`/api/admin/users?${qs}`);
+    if (params?.q)    qs.set('q', params.q);
+    if (params?.page) qs.set('page', String(params.page));
+    return api.get<{ success: boolean; users: AdminUser[]; total: number; page: number; pages: number }>(`/api/admin/users?${qs}`);
   },
   updateUserStatus: (id: string, isActive: boolean) =>
     api.patch<{ success: boolean; user: AdminUser }>(`/api/admin/users/${id}/status`, { isActive }),
@@ -245,7 +252,7 @@ export const adminApi = {
 
   // Promo credits (marketing credits from reserve)
   creditUser: (identifier: string, amount: number, note?: string) =>
-    api.post<{ success: boolean; user: { _id: string; name: string; email: string; walletBalance: number }; transaction: PromoCredit; reserveAfter: number }>(
+    api.post<{ success: boolean; user: { _id: string; username: string; walletBalance: number }; transaction: PromoCredit; reserveAfter: number }>(
       '/api/admin/users/credit',
       { identifier, amount, ...(note ? { note } : {}) },
     ),
@@ -267,7 +274,7 @@ export const adminApi = {
       success: boolean;
       transaction: CompetitionAward;
       competition: Competition;
-      user: { _id: string; name: string; email: string; walletBalance: number };
+      user: { _id: string; username: string; walletBalance: number };
       reserveAfter: number;
     }>(`/api/admin/competitions/${id}/reward`, { identifier, amount, ...(note ? { note } : {}) }),
   listCompetitionAwards: (id: string) =>
@@ -278,7 +285,11 @@ export const adminApi = {
 
 export interface PlatformStats {
   totalUsers:    number;
-  usersByRegion: { _id: string; count: number }[];
+  // The regional breakdown went with the old signup form. `_id` is
+  // 'connected' when the account has a signing wallet on file and 'none'
+  // otherwise — house accounts deliberately have none, so this doubles as a
+  // bot-vs-human split.
+  usersByWallet: { _id: 'connected' | 'none'; count: number }[];
   // Non-custodial money figures: USDC escrowed per gameweek, what winners have
   // actually claimed on-chain, what's still owed to them, and the outstanding
   // play-money balances (which are not real money).
@@ -287,6 +298,76 @@ export interface PlatformStats {
     totalPaidOut:  number;
     unclaimed:     number;
     totalWallets:  number;
+  } | null;
+}
+
+/**
+ * The General Manager's view: what every configured pool contract holds.
+ *
+ * One entry per chain, always — with a single deployment it is one row and a
+ * total, and the response shape does not change when a second chain is added.
+ * See docs/multi-chain-pool-manager.md.
+ */
+export interface PoolsOverview {
+  /** Sum over `chains` that are `healthy` only. Treat as a floor while
+   *  `degraded` is non-empty: an unreachable chain is unknown, not $0. */
+  total: number;
+  chains: {
+    network: string;
+    displayName: string;
+    chainId: number;
+    address: string;
+    tokenAddress: string;
+    isTestnet: boolean;
+    enabled: boolean;
+    /** The deployment every single-chain write path currently uses. */
+    primary: boolean;
+    /** Whole USDC held by the contract, or null when the read failed. */
+    totalBalance: number | null;
+    /** Where escrow draws from, or null when no key/address is configured. */
+    treasuryAddress: string | null;
+    /**
+     * USDC the treasury holds on this chain — what escrow can fund with.
+     * Null means unknown, which is not $0.
+     */
+    treasuryBalance: number | null;
+    /** Why `treasuryBalance` is null, when it is. */
+    treasuryError?: string;
+    rpcConfigured: boolean;
+    /** A treasury/owner key is present, so writes from here could work. */
+    signerConfigured: boolean;
+    healthy: boolean;
+    /** Present only when `healthy` is false — verbatim RPC error. */
+    error?: string;
+  }[];
+  /** Networks whose balance could not be read. */
+  degraded: string[];
+  /**
+   * Can each treasury cover the escrow it still owes for `current`?
+   *
+   * 'short' needs an operator; 'unknown' means we couldn't read one of the two
+   * numbers and is deliberately distinct from both 'funded' and 'short' —
+   * treating it as either is how a real gap gets waved through.
+   */
+  funding: {
+    network: string;
+    displayName: string;
+    treasuryAddress: string | null;
+    treasuryBalance: number | null;
+    pendingEscrow: number;
+    shortfall: number | null;
+    state: 'funded' | 'short' | 'unknown';
+    reason?: string;
+  }[];
+  /** The gameweek an operator is watching, for reconciliation against `total`. */
+  current: {
+    number: number;
+    status: string;
+    poolTotal: number;
+    houseCut: number;
+    /** poolTotal − houseCut: exactly what gets escrowed on-chain. */
+    distributable: number;
+    settledAt: Date | null;
   } | null;
 }
 
@@ -454,6 +535,7 @@ export type OnChainAdvanceOutcome =
   | 'up-to-date'        // on-chain already matches the app
   | 'awaiting-lock'     // still selling — too early to escrow
   | 'awaiting-settle'   // locked but fixtures still running — too early to publish
+  | 'awaiting-topup'    // treasury on this chain holds less than the pot it owes
   | 'not-configured'    // no PRIZE_POOL_ADDRESS on this deployment
   | 'waiting-wallets';  // settled, but some winners have no payout address yet
 
@@ -461,7 +543,7 @@ export interface ProOverview {
   gameweek: { _id: string; number: number; status: ProGameweek['status'] };
   squadCount: number;
   totalSpent: number;
-  leader: { userId: string; name: string; score: number } | null;
+  leader: { userId: string; username: string; score: number } | null;
   leaderSource: 'settled' | 'live' | 'none';
 }
 
@@ -479,7 +561,7 @@ export interface ProFixture {
 
 export interface ProRankedSquad {
   userId: string;
-  name: string;
+  username: string;
   score: number;
   rank: number | null;
 }
@@ -488,7 +570,7 @@ export interface ProGameweekDetail {
   gameweek: ProGameweek;
   squadCount: number;
   totalSpent: number;
-  leader: { userId: string; name: string; score: number } | null;
+  leader: { userId: string; username: string; score: number } | null;
   leaderSource: 'settled' | 'live' | 'none';
   topSquads: ProRankedSquad[];
   fixtures: ProFixture[];
@@ -496,10 +578,12 @@ export interface ProGameweekDetail {
 
 export interface AdminUser {
   _id: string;
-  name: string;
-  email: string;
-  phone: string | null;
-  region: string;
+  username: string;
+  // Immutable — it is what the account signed in with, not something an
+  // admin or the user can re-point at a different wallet.
+  walletAddress: string | null;
+  walletNetwork: string | null;
+  referralCode: string;
   currency: string;
   walletBalance: number;
   isActive: boolean;
@@ -532,7 +616,7 @@ export interface AdminMember {
 
 export interface PromoCredit {
   _id: string;
-  user: { _id: string; name: string; email: string; region: string; referralCode: string } | string;
+  user: { _id: string; username: string; referralCode: string } | string;
   type: string;
   amount: number;
   balanceAfter: number;
@@ -559,7 +643,7 @@ export interface Competition {
 
 export interface CompetitionAward {
   _id: string;
-  user: { _id: string; name: string; email: string } | string;
+  user: { _id: string; username: string } | string;
   type: string;
   amount: number;
   balanceAfter: number;

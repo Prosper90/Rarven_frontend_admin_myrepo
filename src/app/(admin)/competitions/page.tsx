@@ -84,7 +84,7 @@ export default function CompetitionsPage() {
     setBusy("reward");
     try {
       const res = await adminApi.rewardCompetitionWinner(rewardTarget._id, identifier.trim(), Number(rewardAmount), note.trim() || undefined);
-      setError(`Rewarded ${res.user.name} ${fmtCurrency(Number(rewardAmount))} — reserve now ${fmtCurrency(res.reserveAfter)}`);
+      setError(`Rewarded ${res.user.username} ${fmtCurrency(Number(rewardAmount))} — reserve now ${fmtCurrency(res.reserveAfter)}`);
       setRewardTarget(null);
       setIdentifier(""); setRewardAmount(""); setNote("");
       load();
@@ -210,8 +210,7 @@ export default function CompetitionsPage() {
                             const user = typeof a.user === "object" ? a.user : null;
                             return (
                               <div key={a._id} className="flex items-center justify-between text-xs px-3 py-2 bg-surface rounded-lg border border-border">
-                                <span className="text-text font-semibold">{user?.name ?? "—"}</span>
-                                <span className="text-muted">{user?.email ?? ""}</span>
+                                <span className="text-text font-semibold">{user?.username ?? "—"}</span>
                                 <span className="text-success font-bold">{fmtCurrency(a.amount)}</span>
                                 <span className="text-faint">{fmtDate(a.createdAt)}</span>
                               </div>
