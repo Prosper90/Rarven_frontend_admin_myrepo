@@ -14,9 +14,11 @@ function fmtDate(iso: string) {
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit" });
 }
-function fmtCurrency(n: number, currency = "NGN") {
-  const sym: Record<string, string> = { NGN: "₦", GBP: "£", USD: "$" };
-  return (sym[currency] ?? currency + " ") + n.toLocaleString();
+// raRVen is single-currency: every balance in the admin is USDC, so the
+// user's stored `currency` field is legacy data and no longer drives display.
+// One raw unit is one USDC.
+function fmtCurrency(n: number) {
+  return "$" + n.toLocaleString();
 }
 
 export default function UsersPage() {
@@ -159,7 +161,7 @@ export default function UsersPage() {
 
               {/* Amount */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-semibold text-muted uppercase tracking-wider">Amount (₦)</label>
+                <label className="text-[10px] font-semibold text-muted uppercase tracking-wider">Amount (USDC)</label>
                 <input
                   type="number"
                   min="10"
@@ -196,7 +198,7 @@ export default function UsersPage() {
               {creditSuccess && (
                 <div className="flex items-center gap-2 text-sm text-success">
                   <CheckCircle size={14} />
-                  <span>₦{creditSuccess.amount.toLocaleString()} credited to <strong>{creditSuccess.name}</strong></span>
+                  <span>${creditSuccess.amount.toLocaleString()} credited to <strong>{creditSuccess.name}</strong></span>
                 </div>
               )}
               {creditError && <p className="text-sm text-danger">{creditError}</p>}
@@ -231,7 +233,7 @@ export default function UsersPage() {
                       <tr key={c._id} className="hover:bg-surface-2 transition-colors">
                         <td className="px-5 py-3 text-sm font-semibold text-text">{u?.name ?? "—"}</td>
                         <td className="px-5 py-3 text-xs text-muted">{u?.email ?? "—"}</td>
-                        <td className="px-5 py-3 text-sm font-bold text-success">+₦{c.amount.toLocaleString()}</td>
+                        <td className="px-5 py-3 text-sm font-bold text-success">+${c.amount.toLocaleString()}</td>
                         <td className="px-5 py-3 text-xs text-muted max-w-[200px] truncate">{c.description}</td>
                         <td className="px-5 py-3 text-xs text-faint">
                           {fmtDate(c.createdAt)} · {fmtTime(c.createdAt)}
@@ -297,8 +299,8 @@ export default function UsersPage() {
                 <td className="px-5 py-4">
                   <span className="text-xs font-bold text-text bg-surface-3 border border-border px-2 py-0.5 rounded">{u.region}</span>
                 </td>
-                <td className="px-5 py-4 text-xs text-faint">{u.currency}</td>
-                <td className="px-5 py-4 text-sm font-semibold text-primary">{fmtCurrency(u.walletBalance, u.currency)}</td>
+                <td className="px-5 py-4 text-xs text-faint">USDC</td>
+                <td className="px-5 py-4 text-sm font-semibold text-primary">{fmtCurrency(u.walletBalance)}</td>
                 <td className="px-5 py-4">
                   <div className="flex items-center gap-2">
                     <Badge label={u.isActive ? "active" : "suspended"} variant={u.isActive ? "success" : "danger"} />

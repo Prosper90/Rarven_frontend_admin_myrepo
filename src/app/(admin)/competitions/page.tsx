@@ -6,7 +6,7 @@ import Modal from "@/components/Modal";
 import StatCard from "@/components/StatCard";
 import { Plus, Gift, Trophy, Loader2, ChevronDown, ChevronUp, Play, Square } from "lucide-react";
 
-function fmtCurrency(n: number) { return "₦" + n.toLocaleString(); }
+function fmtCurrency(n: number) { return "$" + n.toLocaleString(); }
 function fmtDate(iso: string) { return new Date(iso).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }); }
 
 const STATUS_VARIANT: Record<Competition["status"], "neutral" | "open" | "settled"> = {
@@ -253,7 +253,7 @@ export default function CompetitionsPage() {
                 </select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-muted uppercase tracking-wider">Prize Amount (₦)</label>
+                <label className="text-xs font-semibold text-muted uppercase tracking-wider">Prize Amount (USDC)</label>
                 <input type="number" min="1" value={prizeAmount} onChange={(e) => setPrizeAmount(e.target.value)} placeholder="e.g. 50000"
                   className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none focus:border-primary/50" />
               </div>
@@ -300,7 +300,7 @@ export default function CompetitionsPage() {
                 className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none focus:border-primary/50" />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-muted uppercase tracking-wider">Amount (₦)</label>
+              <label className="text-xs font-semibold text-muted uppercase tracking-wider">Amount (USDC)</label>
               <input type="number" min="1" value={rewardAmount} onChange={(e) => setRewardAmount(e.target.value)}
                 className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none focus:border-primary/50" />
             </div>

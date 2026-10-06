@@ -15,7 +15,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [ready, setReady]     = useState(false); // true once client has checked localStorage
 
-  // Skip the login page if already authed — runs only on client
+  // Skip the login page if already authed â€” runs only on client
   useEffect(() => {
     if (isLoggedIn()) {
       router.replace("/dashboard");
@@ -47,7 +47,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex items-center gap-3 mb-8">
-          <Image src="/logo.png" alt="raRVen" width={48} height={48} className="rounded-xl" />
+          <Image src="/logox.png" alt="raRVen" width={84} height={28} className="h-auto w-auto" />
           <div>
             <BrandName className="text-lg font-black text-text" />
             <p className="text-[10px] text-faint uppercase tracking-[0.15em]">Admin Console</p>
@@ -79,7 +79,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                placeholder="••••••••"
+                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                 className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none focus:border-primary/50 placeholder:text-faint transition-colors"
               />
             </div>
@@ -95,13 +95,13 @@ export default function LoginPage() {
               disabled={loading || !email || !password}
               className="w-full py-3 rounded-xl bg-primary text-white font-bold text-sm transition-all hover:bg-primary-dim disabled:opacity-50 disabled:cursor-not-allowed mt-1"
             >
-              {loading ? "Signing in…" : "Sign in"}
+              {loading ? "Signing inâ€¦" : "Sign in"}
             </button>
           </form>
         </div>
 
         <p className="text-[10px] text-faint text-center mt-4">
-          raRVen Admin · Authorised personnel only
+          raRVen Admin Â· Authorised personnel only
         </p>
       </div>
     </div>

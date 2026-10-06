@@ -154,7 +154,7 @@ export const adminApi = {
     api.post<{
       success: boolean;
       metrics: { updated: number; failed: number; teamsProcessed: number; teamsRemaining: number };
-      pricing: { priced: number };
+      pricing: { priced: number; teamFormCovered: number };
       budgetCap: number;
     }>('/api/admin/pro/pricing/recalculate', {}),
   setProPlayerPrice: (playerId: string, price: number | null) =>
@@ -173,6 +173,25 @@ export const adminApi = {
     api.get<{ success: boolean; detail: ProGameweekDetail }>(`/api/admin/pro/gameweeks/${id}/detail`),
   syncProGameweekFixtures: (id: string) =>
     api.post<{ success: boolean; detail: ProGameweekDetail }>(`/api/admin/pro/gameweeks/${id}/sync-fixtures`, {}),
+
+  // FieldPort Pro — on-chain USDC escrow.
+  //
+  // Read-only observation plus a single order-free "advance". The lifecycle cron
+  // drives this automatically; `advance` is the manual catch-up for when it
+  // couldn't run (treasury out of gas, transient RPC failure). It performs at
+  // most one step, chosen by reading chain state, so it is safe to press
+  // repeatedly and can't strand a pot the way the old ordered
+  // fund → lock → publish trio could.
+  getProGameweekOnChain: (gameweekId: string) =>
+    api.get<{ success: boolean; pool: OnChainPool; gameweekNumber: number; state: OnChainGameweekState }>(
+      `/api/admin/pro/gameweeks/${gameweekId}/onchain`,
+    ),
+  advanceProGameweekOnChain: (gameweekId: string) =>
+    api.post<{ success: boolean; outcome: OnChainAdvanceOutcome; detail: string; txHash?: string }>(
+      `/api/admin/pro/gameweeks/${gameweekId}/onchain/advance`, {},
+    ),
+  registerOnChainFunder: (address: string) =>
+    api.post<{ success: boolean; txHash: string; funder: string }>('/api/admin/pro/onchain/funder', { address }),
 
   // FieldPort Pro — Finance Admin
   getProPoolSummary: (gameweekId: string) =>
@@ -211,14 +230,11 @@ export const adminApi = {
     api.put<{ success: boolean; reserve: number }>('/api/admin/reserve', { balance }),
   topUpReserve: (amount: number) =>
     api.post<{ success: boolean; reserve: number }>('/api/admin/reserve/topup', { amount }),
-  fundReserve: (amount: number) =>
-    api.post<{ success: boolean; authorization_url: string; access_code: string; reference: string }>(
-      '/api/admin/reserve/fund', { amount }
-    ),
-  verifyReserve: (reference: string) =>
-    api.get<{ success: boolean; alreadyProcessed: boolean; amount: number; reserve: number }>(
-      `/api/admin/reserve/verify?reference=${encodeURIComponent(reference)}`
-    ),
+  // No `fundReserve`/`verifyReserve` here: the reserve is no longer fundable
+  // from the dashboard. Real money is USDC in the treasury, escrowed per
+  // gameweek into RavenPrizePool by the lifecycle cron (or, to catch up after
+  // a failure, by advanceGameweekPool below). Topping up the reserve only moves
+  // an internal ledger number and never touches a chain.
 
   // Pool seeding from reserve (any pool_manager / superadmin)
   seedPool: (poolId: string, amount: number, playerId: string) =>
@@ -263,11 +279,14 @@ export const adminApi = {
 export interface PlatformStats {
   totalUsers:    number;
   usersByRegion: { _id: string; count: number }[];
+  // Non-custodial money figures: USDC escrowed per gameweek, what winners have
+  // actually claimed on-chain, what's still owed to them, and the outstanding
+  // play-money balances (which are not real money).
   revenue: {
-    totalDeposits:    number;
-    totalWithdrawals: number;
-    netFlow:          number;
-    totalWallets:     number;
+    totalEscrowed: number;
+    totalPaidOut:  number;
+    unclaimed:     number;
+    totalWallets:  number;
   } | null;
 }
 
@@ -393,6 +412,50 @@ export interface ProPoolSummary {
   houseCut: number;
   settledAt: string | null;
 }
+
+// ── On-chain USDC escrow ──────────────────────────────────────────────────
+
+/** Deployment-level state. `configured: false` means no PRIZE_POOL_ADDRESS. */
+export interface OnChainPool {
+  configured: boolean;
+  address: string | null;
+  network: string | null;
+  chainId: number | null;
+  escrowBalance: number | null;
+}
+
+/** Per-gameweek pot state as the contract sees it. */
+export interface OnChainGameweekState {
+  configured: true;
+  address: string;
+  network: string | null;
+  /** Whole USDC the contract holds, across every gameweek. */
+  escrowBalance: number;
+  totalPool: number;
+  distributed: number;
+  unclaimed: number;
+  locked: boolean;
+  settled: boolean;
+  winners: string[];
+  prizes: number[];
+}
+
+/**
+ * What one `advance` call did.
+ *
+ * All of these are normal, not errors. The lifecycle cron calls this every
+ * five minutes, so most ticks land on `up-to-date` or one of the `awaiting-*`
+ * states — those just mean it's the wrong time yet, not that something broke.
+ */
+export type OnChainAdvanceOutcome =
+  | 'escrowed'          // pot funded + frozen on-chain
+  | 'locked'            // an already-funded pot was frozen (progressive-funding recovery)
+  | 'published'         // top 3 written on-chain; claims now open
+  | 'up-to-date'        // on-chain already matches the app
+  | 'awaiting-lock'     // still selling — too early to escrow
+  | 'awaiting-settle'   // locked but fixtures still running — too early to publish
+  | 'not-configured'    // no PRIZE_POOL_ADDRESS on this deployment
+  | 'waiting-wallets';  // settled, but some winners have no payout address yet
 
 export interface ProOverview {
   gameweek: { _id: string; number: number; status: ProGameweek['status'] };

@@ -40,7 +40,7 @@ const EMPTY_FORM = {
 };
 
 // Used only in the edit/create form to show calculated Pro listing price
-function fmtCurrency(n: number) { return "₦" + n.toLocaleString(); }
+function fmtCurrency(n: number) { return "$" + n.toLocaleString(); }
 
 // ── Player thumbnail (photo → initials fallback) ─────────────────────────────
 

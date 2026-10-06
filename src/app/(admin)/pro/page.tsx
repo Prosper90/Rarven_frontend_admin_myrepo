@@ -7,7 +7,7 @@ import Modal from "@/components/Modal";
 import StatCard from "@/components/StatCard";
 import { Plus, Lock, PlayCircle, RefreshCw, Loader2, Wallet, RotateCcw, Crown, Users, RotateCw } from "lucide-react";
 
-function fmtCurrency(n: number) { return "₦" + n.toLocaleString(); }
+function fmtCurrency(n: number) { return "$" + n.toLocaleString(); }
 function fmtDate(iso: string) { return new Date(iso).toLocaleDateString("en-NG", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); }
 
 const STATUS_VARIANT: Record<ProGameweek["status"], "upcoming" | "open" | "locked" | "settled"> = {
@@ -166,7 +166,11 @@ export default function ProAdminPage() {
       const cov = res.metrics.teamsRemaining > 0
         ? ` · stats refresh covered this run's team batch, ${res.metrics.teamsRemaining} team(s) still pending (free API tier — click again later to continue)`
         : " · stats refresh has now covered every team";
-      setError(`Pricing recalculated — ${res.pricing.priced} player(s) priced, budget cap ₦${res.budgetCap.toLocaleString()}${cov}`);
+      // Team form is aggregated from settled gameweeks, so coverage starts at
+      // zero and only rises as gameweeks are scored. Surfaced so a run where
+      // the metric is effectively inert is visible rather than mysterious.
+      const form = ` · team form applied to ${res.pricing.teamFormCovered}/${res.pricing.priced} player(s)`;
+      setError(`Pricing recalculated — ${res.pricing.priced} player(s) priced, budget cap $${res.budgetCap.toLocaleString()}${cov}${form}`);
       load();
     } catch (e: unknown) { setError(e instanceof Error ? e.message : "Recalculate failed"); }
     finally { setBusy(null); }
@@ -563,7 +567,7 @@ export default function ProAdminPage() {
         <Modal title="Fantasy Config" onClose={() => setShowConfig(false)}>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-muted uppercase tracking-wider">Reference Budget (₦) — not enforced</label>
+              <label className="text-xs font-semibold text-muted uppercase tracking-wider">Reference Budget (USDC) — not enforced</label>
               <input type="number" defaultValue={config?.budgetCap} onChange={(e) => setBudgetCapDraft(e.target.value)} placeholder={String(config?.budgetCap ?? "")}
                 className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none focus:border-primary/50" />
             </div>
@@ -572,7 +576,7 @@ export default function ProAdminPage() {
               <input type="number" defaultValue={config?.pricingMultiplier} onChange={(e) => setMultiplierDraft(e.target.value)} placeholder={String(config?.pricingMultiplier ?? "")}
                 className="bg-surface-2 border border-border rounded-xl px-4 py-3 text-sm text-text outline-none focus:border-primary/50" />
             </div>
-            <p className="text-[10px] text-faint">Price (₦) = Player Score (0-10) × multiplier. Squad purchases are real money — a user&apos;s wallet balance is the only real spending limit. The reference budget below is just a display figure (e.g. for house-account seeding), no longer enforced on real purchases.</p>
+            <p className="text-[10px] text-faint">Price (USDC) = Player Score (0-10) × multiplier. Squad purchases are real money — a user&apos;s wallet balance is the only real spending limit. The reference budget below is just a display figure (e.g. for house-account seeding), no longer enforced on real purchases.</p>
             <div className="flex gap-3">
               <button onClick={() => setShowConfig(false)} className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold text-muted hover:text-text transition-colors">Cancel</button>
               <button

@@ -22,7 +22,7 @@ const CAT_LABELS: Record<string, string> = {
 
 const POOL_CATEGORIES = ["GK","DEF","MID","ATT"] as const;
 
-function fmtCurrency(n: number) { return "₦" + n.toLocaleString(); }
+function fmtCurrency(n: number) { return "$" + n.toLocaleString(); }
 
 export default function MatchdayDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: matchdayId } = use(params);
@@ -388,7 +388,7 @@ export default function MatchdayDetailPage({ params }: { params: Promise<{ id: s
                   {pool.houseEntry?.player && (
                     <div className="mt-1 flex items-center gap-1 text-[10px] text-amber-400">
                       <Shield size={9} />
-                      <span>House: {typeof pool.houseEntry.player === "object" ? pool.houseEntry.player.name : "—"} · ₦{pool.houseEntry.stake.toLocaleString()}</span>
+                      <span>House: {typeof pool.houseEntry.player === "object" ? pool.houseEntry.player.name : "—"} · ${pool.houseEntry.stake.toLocaleString()}</span>
                     </div>
                   )}
                 </td>
@@ -509,7 +509,7 @@ export default function MatchdayDetailPage({ params }: { params: Promise<{ id: s
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-muted uppercase tracking-wider">Stake from reserve (₦)</label>
+                <label className="text-xs font-semibold text-muted uppercase tracking-wider">Stake from reserve (USDC)</label>
                 <input
                   type="number"
                   min="100"

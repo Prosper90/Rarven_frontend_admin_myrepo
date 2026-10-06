@@ -4,8 +4,9 @@ import { adminApi, type ProGameweekDetail, type ProGameweek } from "@/lib/api";
 import Badge from "@/components/Badge";
 import StatCard from "@/components/StatCard";
 import { ArrowLeft, Crown, Wallet, Users, RefreshCw, Loader2, Trophy } from "lucide-react";
+import OnChainEscrowPanel from "@/components/OnChainEscrowPanel";
 
-function fmtCurrency(n: number) { return "₦" + n.toLocaleString(); }
+function fmtCurrency(n: number) { return "$" + n.toLocaleString(); }
 function fmtDateTime(iso: string) {
   return new Date(iso).toLocaleString("en-NG", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
@@ -116,6 +117,9 @@ export default function ProGameweekDetailPage({ params }: { params: Promise<{ id
         <StatCard label="Total Spent" value={fmtCurrency(detail.totalSpent)} accent="primary" />
         <StatCard label="Users Involved" value={detail.squadCount} accent="info" />
       </div>
+
+      {/* On-chain pot — observation + one order-free manual retry */}
+      <OnChainEscrowPanel gameweekId={id} />
 
       {/* Fixtures — this is the "is data actually flowing" view */}
       <div className="bg-surface border border-border rounded-2xl overflow-hidden">

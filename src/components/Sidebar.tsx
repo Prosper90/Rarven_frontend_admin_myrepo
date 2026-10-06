@@ -55,7 +55,7 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="px-5 py-5 border-b border-border">
         <div className="flex items-center gap-2.5">
-          <Image src="/logo.png" alt="raRVen" width={38} height={38} className="rounded-xl" />
+          <Image src="/logox.png" alt="raRVen" width={72} height={24} className="h-auto w-auto" />
           <div>
             <BrandName className="text-sm font-black text-text" />
             <p className="text-[9px] text-faint uppercase tracking-[0.15em] leading-none mt-0.5">Admin Console</p>

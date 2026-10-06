@@ -4,7 +4,7 @@ import { adminApi, Matchday, MatchdayRecord, PlatformStats, type Player } from "
 import { getAdminInfo } from "@/lib/auth";
 import StatCard from "@/components/StatCard";
 import Badge from "@/components/Badge";
-import { Shield, Edit2, Check, X, ExternalLink, Loader2, CheckCircle } from "lucide-react";
+import { Shield, Edit2, Check, X, Loader2 } from "lucide-react";
 
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit" });
@@ -12,7 +12,7 @@ function fmtTime(iso: string) {
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" });
 }
-function fmtCurrency(n: number) { return "₦" + n.toLocaleString(); }
+function fmtCurrency(n: number) { return "$" + n.toLocaleString(); }
 
 // Unified row type for the combined sessions table
 type SessionRow =
@@ -31,11 +31,6 @@ export default function DashboardPage() {
   const [reserveEdit, setReserveEdit] = useState(false);
   const [reserveInput, setReserveInput] = useState("");
   const [reserveSaving, setReserveSaving] = useState(false);
-  const [fundMode, setFundMode]       = useState(false);
-  const [fundAmount, setFundAmount]   = useState("");
-  const [fundLoading, setFundLoading] = useState(false);
-  const [fundError, setFundError]     = useState("");
-  const [fundSuccess, setFundSuccess] = useState(false);
   const [topUpMode, setTopUpMode]       = useState(false);
   const [topUpAmount, setTopUpAmount]   = useState("");
   const [topUpLoading, setTopUpLoading] = useState(false);
@@ -65,23 +60,6 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, [canSeeRevenue]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Detect Paystack callback after reserve funding
-  useEffect(() => {
-    const ref = new URLSearchParams(window.location.search).get('reference');
-    if (!ref?.startsWith('RSV-')) return;
-    const url = new URL(window.location.href);
-    url.searchParams.delete('reference');
-    url.searchParams.delete('trxref');
-    window.history.replaceState({}, '', url.toString());
-    adminApi.verifyReserve(ref)
-      .then((r) => {
-        setReserve(r.reserve);
-        setFundSuccess(true);
-        setTimeout(() => setFundSuccess(false), 6000);
-      })
-      .catch(() => setFundError('Reserve verification failed — the webhook may still process it'));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   async function handleTopUp() {
     const amt = Number(topUpAmount);
     if (isNaN(amt) || amt <= 0) { setTopUpError('Enter a positive amount'); return; }
@@ -96,20 +74,6 @@ export default function DashboardPage() {
       setTopUpError(e instanceof Error ? e.message : 'Top-up failed');
     } finally {
       setTopUpLoading(false);
-    }
-  }
-
-  async function handleFundReserve() {
-    const amt = Number(fundAmount);
-    if (isNaN(amt) || amt < 100) { setFundError('Minimum ₦100'); return; }
-    setFundLoading(true);
-    setFundError('');
-    try {
-      const result = await adminApi.fundReserve(amt);
-      window.location.href = result.authorization_url;
-    } catch (e: unknown) {
-      setFundError(e instanceof Error ? e.message : 'Failed to initialize payment');
-      setFundLoading(false);
     }
   }
 
@@ -189,30 +153,33 @@ export default function DashboardPage() {
         <StatCard label="Regions Live"   value={stats?.usersByRegion.length ?? "—"} sub="Countries"        accent="warning" />
       </div>
 
-      {/* Revenue cards */}
+      {/* Money cards. Not deposits/withdrawals — raRVen is non-custodial, so
+          USDC flows in as a per-gameweek pot and out when a winner claims it
+          straight from the contract. Unclaimed is the one to watch: it's an
+          outstanding liability, not revenue. */}
       {canSeeRevenue && stats?.revenue && (
         <div className="grid grid-cols-4 gap-4">
           <div className="bg-surface border border-border rounded-xl p-4">
-            <p className="text-[10px] font-semibold text-muted uppercase tracking-wider">Total Deposits</p>
-            <p className="text-xl font-black text-success mt-1">{fmtCurrency(stats.revenue.totalDeposits)}</p>
-            <p className="text-[10px] text-faint mt-1">All time</p>
+            <p className="text-[10px] font-semibold text-muted uppercase tracking-wider">USDC Escrowed</p>
+            <p className="text-xl font-black text-success mt-1">{fmtCurrency(stats.revenue.totalEscrowed)}</p>
+            <p className="text-[10px] text-faint mt-1">All gameweek pots</p>
           </div>
           <div className="bg-surface border border-border rounded-xl p-4">
-            <p className="text-[10px] font-semibold text-muted uppercase tracking-wider">Total Withdrawals</p>
-            <p className="text-xl font-black text-danger mt-1">{fmtCurrency(stats.revenue.totalWithdrawals)}</p>
-            <p className="text-[10px] text-faint mt-1">All time</p>
+            <p className="text-[10px] font-semibold text-muted uppercase tracking-wider">Paid Out</p>
+            <p className="text-xl font-black text-primary mt-1">{fmtCurrency(stats.revenue.totalPaidOut)}</p>
+            <p className="text-[10px] text-faint mt-1">Claimed on-chain</p>
           </div>
           <div className="bg-surface border border-border rounded-xl p-4">
-            <p className="text-[10px] font-semibold text-muted uppercase tracking-wider">Net Flow</p>
-            <p className={`text-xl font-black mt-1 ${stats.revenue.netFlow >= 0 ? "text-success" : "text-danger"}`}>
-              {fmtCurrency(stats.revenue.netFlow)}
+            <p className="text-[10px] font-semibold text-muted uppercase tracking-wider">Unclaimed</p>
+            <p className={`text-xl font-black mt-1 ${stats.revenue.unclaimed > 0 ? "text-warning" : "text-faint"}`}>
+              {fmtCurrency(stats.revenue.unclaimed)}
             </p>
-            <p className="text-[10px] text-faint mt-1">Deposits – Withdrawals</p>
+            <p className="text-[10px] text-faint mt-1">Owed to winners</p>
           </div>
           <div className="bg-surface border border-border rounded-xl p-4">
-            <p className="text-[10px] font-semibold text-muted uppercase tracking-wider">Total Wallets</p>
-            <p className="text-xl font-black text-primary mt-1">{fmtCurrency(stats.revenue.totalWallets)}</p>
-            <p className="text-[10px] text-faint mt-1">Across all users</p>
+            <p className="text-[10px] font-semibold text-muted uppercase tracking-wider">Play Balances</p>
+            <p className="text-xl font-black text-text mt-1">{fmtCurrency(stats.revenue.totalWallets)}</p>
+            <p className="text-[10px] text-faint mt-1">Not real money</p>
           </div>
         </div>
       )}
@@ -227,7 +194,7 @@ export default function DashboardPage() {
             <p className="text-[10px] font-semibold text-amber-400/60 uppercase tracking-wider">Platform Reserve</p>
             {reserveEdit ? (
               <div className="flex items-center gap-2 mt-1">
-                <span className="text-sm text-amber-400">₦</span>
+                <span className="text-sm text-amber-400">$</span>
                 <input
                   type="number"
                   value={reserveInput}
@@ -261,7 +228,7 @@ export default function DashboardPage() {
               </div>
             ) : topUpMode ? (
               <div className="flex items-center gap-2 mt-1">
-                <span className="text-sm text-amber-400">₦</span>
+                <span className="text-sm text-amber-400">$</span>
                 <input
                   type="number"
                   min="1"
@@ -286,51 +253,17 @@ export default function DashboardPage() {
                   <X size={14} />
                 </button>
               </div>
-            ) : fundMode ? (
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-sm text-amber-400">₦</span>
-                <input
-                  type="number"
-                  min="100"
-                  value={fundAmount}
-                  onChange={(e) => { setFundAmount(e.target.value); setFundError(''); }}
-                  placeholder="e.g. 5000"
-                  autoFocus
-                  className="w-36 bg-surface-2 border border-amber-500/30 rounded-lg px-2 py-1 text-sm text-amber-300 outline-none focus:border-amber-500/60 placeholder:text-amber-500/30"
-                />
-                <button
-                  disabled={fundLoading || !fundAmount}
-                  onClick={handleFundReserve}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 hover:bg-amber-500/30 disabled:opacity-50 text-xs font-bold transition-colors"
-                >
-                  {fundLoading ? <Loader2 size={12} className="animate-spin" /> : <ExternalLink size={12} />}
-                  {fundLoading ? "Opening…" : "Pay via Paystack"}
-                </button>
-                <button
-                  onClick={() => { setFundMode(false); setFundAmount(''); setFundError(''); }}
-                  className="p-1.5 rounded-lg bg-surface-2 border border-border text-muted hover:text-text transition-colors"
-                >
-                  <X size={14} />
-                </button>
-              </div>
             ) : (
               <p className="text-xl font-black text-amber-300 mt-0.5">{fmtCurrency(reserve)}</p>
             )}
             {topUpError && <p className="text-xs text-danger mt-1">{topUpError}</p>}
-            {fundError && <p className="text-xs text-danger mt-1">{fundError}</p>}
-            {fundSuccess && (
-              <div className="flex items-center gap-1.5 text-xs text-success mt-1">
-                <CheckCircle size={12} />
-                Reserve funded successfully
-              </div>
-            )}
-            {!reserveEdit && !fundMode && !topUpMode && (
+            {!reserveEdit && !topUpMode && (
               <p className="text-[10px] text-amber-400/40 mt-1">
-                Top Up = manual testnet ledger bump · Fund = real Paystack payment (needs a live key)
+                Internal ledger for promo credits — real money is USDC escrowed per gameweek
               </p>
             )}
           </div>
-          {!reserveEdit && !fundMode && !topUpMode && (
+          {!reserveEdit && !topUpMode && (
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => { setReserveInput(String(reserve)); setReserveEdit(true); }}
@@ -342,18 +275,10 @@ export default function DashboardPage() {
               <button
                 onClick={() => { setTopUpMode(true); setTopUpError(''); }}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 text-xs font-bold transition-colors"
-                title="Testnet: add an amount to the current reserve"
+                title="Add an amount to the current reserve (ledger only — moves no money)"
               >
                 <Check size={13} />
                 Top Up
-              </button>
-              <button
-                onClick={() => { setFundMode(true); setFundError(''); }}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 text-xs font-bold transition-colors"
-                title="Mainnet: fund reserve via real Paystack payment"
-              >
-                <ExternalLink size={13} />
-                Fund
               </button>
             </div>
           )}
