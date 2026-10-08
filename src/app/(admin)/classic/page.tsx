@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { adminApi, Matchday, MatchdayRecord } from "@/lib/api";
+import { adminApi, MatchdayRecord } from "@/lib/api";
 import Badge from "@/components/Badge";
 import { Radio, CircleDot } from "lucide-react";
 
@@ -47,41 +47,28 @@ const POOL_CATEGORY_LABELS: Record<string, string> = {
   GK: "Goalkeepers", DEF: "Defenders", MID: "Midfielders", ATT: "Attackers",
 };
 
-// Unified row type so we can merge both lists into one table
-type SessionRow =
-  | { kind: "weekly"; data: Matchday }
-  | { kind: "daily";  data: MatchdayRecord };
+// Daily pool sessions only — weekly (Match Weeks) was removed from Classic.
+type SessionRow = MatchdayRecord;
 
 export default function ClassicPage() {
-  const [matchweeks, setMatchweeks] = useState<Matchday[]>([]);
   const [matchdays, setMatchdays]   = useState<MatchdayRecord[]>([]);
   const [loading, setLoading]       = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      adminApi.listMatchweeks().catch(() => ({ matchweeks: [] as Matchday[] })),
-      adminApi.listMatchdays().catch(()   => ({ matchdays:  [] as MatchdayRecord[] })),
-    ]).then(([wRes, dRes]) => {
-      setMatchweeks(wRes.matchweeks ?? []);
-      setMatchdays(dRes.matchdays ?? []);
-    }).finally(() => setLoading(false));
+    adminApi.listMatchdays()
+      .then((dRes) => setMatchdays(dRes.matchdays ?? []))
+      .finally(() => setLoading(false));
   }, []);
 
-  // Find any currently-live sessions
-  const liveWeek = matchweeks.find((m) => m.liveActive);
-  const liveDay  = matchdays.find((m)  => m.liveActive);
+  // Find any currently-live session
+  const liveDay = matchdays.find((m) => m.liveActive);
 
-  // Merge and sort by most recent first
-  const rows: SessionRow[] = [
-    ...matchweeks.map((d): SessionRow => ({ kind: "weekly", data: d })),
-    ...matchdays.map((d):  SessionRow => ({ kind: "daily",  data: d })),
-  ].sort((a, b) => {
-    const dateA = a.kind === "weekly" ? a.data.startsAt : (a.data as MatchdayRecord).matchDate;
-    const dateB = b.kind === "weekly" ? b.data.startsAt : (b.data as MatchdayRecord).matchDate;
-    return new Date(dateB).getTime() - new Date(dateA).getTime();
-  });
+  // Most recent first
+  const rows: SessionRow[] = [...matchdays].sort(
+    (a, b) => new Date(b.matchDate).getTime() - new Date(a.matchDate).getTime(),
+  );
 
-  const hasLive = liveWeek || liveDay;
+  const hasLive = Boolean(liveDay);
 
   return (
     <div className="p-8 flex flex-col gap-6">
@@ -104,32 +91,6 @@ export default function ClassicPage() {
           </div>
 
           <div className="flex flex-col gap-2">
-            {liveWeek && (
-              <div className="flex items-center justify-between bg-surface-2 rounded-xl px-4 py-3">
-                <div>
-                  <p className="text-xs font-semibold text-text">
-                    Weekly · GW{liveWeek.weekNumber} · {fmtDate(liveWeek.startsAt)}
-                  </p>
-                  <p className="text-[11px] text-muted mt-0.5">
-                    {liveWeek.liveRankings
-                      ? (["ATT","MID","DEF","GK"] as const)
-                          .map((c) => liveWeek.liveRankings[c]
-                            ? `${c}: ${liveWeek.liveRankings[c]!.playerName} ${liveWeek.liveRankings[c]!.rating}`
-                            : `${c}: —`)
-                          .join("  ·  ")
-                      : "No rankings yet"}
-                  </p>
-                </div>
-                <a
-                  href={`/matchdays/${liveWeek._id}`}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-xs font-bold text-red-400 hover:bg-red-500/15 transition-colors shrink-0 ml-4"
-                >
-                  <Radio size={12} />
-                  Update Rankings
-                </a>
-              </div>
-            )}
-
             {liveDay && (
               <div className="flex items-center justify-between bg-surface-2 rounded-xl px-4 py-3">
                 <div>
@@ -180,13 +141,9 @@ export default function ClassicPage() {
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div>
             <p className="text-sm font-bold text-text">All Sessions</p>
-            <p className="text-xs text-muted mt-0.5">Weekly (Match Weeks) and Daily (Match Days) pools combined</p>
+            <p className="text-xs text-muted mt-0.5">Daily (Match Days) pools</p>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-muted">
-            <span className="flex items-center gap-1.5 opacity-50">
-              <span className="w-2 h-2 rounded-sm bg-primary/30" /> Weekly
-              <span className="text-[9px] font-black uppercase tracking-wider bg-surface-3 border border-border px-1.5 py-0.5 rounded text-faint">Paused</span>
-            </span>
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-500/30" /> Daily</span>
           </div>
         </div>
@@ -194,47 +151,33 @@ export default function ClassicPage() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-border">
-              {["Type", "Label / Week", "Date", "Status", "Live", "Pools", ""].map((h) => (
+              {["Label", "Date", "Status", "Live", "Pools", ""].map((h) => (
                 <th key={h} className="px-5 py-3 text-left text-[10px] font-bold text-muted uppercase tracking-wider">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {loading && (
-              <tr><td colSpan={7} className="px-5 py-8 text-center text-sm text-muted">Loading…</td></tr>
+              <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-muted">Loading…</td></tr>
             )}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-5 py-8 text-center text-sm text-muted">
-                  No sessions yet. Create Match Weeks or Match Days first.
+                <td colSpan={6} className="px-5 py-8 text-center text-sm text-muted">
+                  No sessions yet. Create a Match Day first.
                 </td>
               </tr>
             )}
-            {rows.slice(0, 20).map((row) => {
-              const isWeekly = row.kind === "weekly";
-              const d        = row.data;
-              const dateStr  = isWeekly ? fmtDate((d as Matchday).startsAt) : fmtDate((d as MatchdayRecord).matchDate);
-              const label    = isWeekly ? `GW${(d as Matchday).weekNumber} · ${(d as Matchday).season}` : (d as MatchdayRecord).label;
-              const href     = isWeekly ? `/matchdays/${d._id}` : `/match-days/${d._id}`;
-              const isLive   = d.liveActive;
+            {rows.slice(0, 20).map((d) => {
+              const dateStr = fmtDate(d.matchDate);
+              const href    = `/match-days/${d._id}`;
+              const isLive  = d.liveActive;
 
               return (
-                <tr key={`${row.kind}-${d._id}`} className={`hover:bg-surface-2 transition-colors ${
-                  isLive ? (isWeekly ? "bg-red-500/[0.03]" : "bg-amber-500/[0.03]") : ""
+                <tr key={d._id} className={`hover:bg-surface-2 transition-colors ${
+                  isLive ? "bg-amber-500/[0.03]" : ""
                 }`}>
-                  {/* Type badge */}
-                  <td className="px-5 py-4">
-                    <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-md border ${
-                      isWeekly
-                        ? "text-primary bg-primary/10 border-primary/20"
-                        : "text-amber-400 bg-amber-500/10 border-amber-500/20"
-                    }`}>
-                      {isWeekly ? "Weekly" : "Daily"}
-                    </span>
-                  </td>
-
                   {/* Label */}
-                  <td className="px-5 py-4 text-sm font-semibold text-text">{label}</td>
+                  <td className="px-5 py-4 text-sm font-semibold text-text">{d.label}</td>
 
                   {/* Date */}
                   <td className="px-5 py-4 text-sm text-muted">{dateStr}</td>
@@ -262,11 +205,7 @@ export default function ClassicPage() {
                       {(["ATT","MID","DEF","GK"] as const).map((cat) => (
                         <span
                           key={cat}
-                          className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${
-                            isWeekly
-                              ? "text-primary/60 bg-primary/5 border-primary/10"
-                              : "text-amber-400/60 bg-amber-500/5 border-amber-500/10"
-                          }`}
+                          className="text-[9px] font-black px-1.5 py-0.5 rounded border text-amber-400/60 bg-amber-500/5 border-amber-500/10"
                         >
                           {cat}
                         </span>

@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   LayoutDashboard,
-  CalendarRange,
   CalendarDays,
   Zap,
   TrendingUp,
@@ -32,12 +31,6 @@ const NAV: {
     label: "Dashboard",
     icon: LayoutDashboard,
     roles: ["superadmin", "pool_manager", "support"],
-  },
-  {
-    href: "/matchdays",
-    label: "Match Weeks",
-    icon: CalendarRange,
-    roles: ["superadmin", "pool_manager"],
   },
   {
     href: "/match-days",

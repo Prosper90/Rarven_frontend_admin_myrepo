@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { adminApi, Matchday, MatchdayRecord, PlatformStats, PoolsOverview, type Player } from "@/lib/api";
+import { adminApi, MatchdayRecord, PlatformStats, PoolsOverview, type Player } from "@/lib/api";
 import { getAdminInfo } from "@/lib/auth";
 import StatCard from "@/components/StatCard";
 import Badge from "@/components/Badge";
@@ -14,10 +14,8 @@ function fmtDate(iso: string) {
 }
 function fmtCurrency(n: number) { return "$" + n.toLocaleString(); }
 
-// Unified row type for the combined sessions table
-type SessionRow =
-  | { kind: "weekly"; data: Matchday }
-  | { kind: "daily";  data: MatchdayRecord };
+// Unified row type for the sessions table
+type SessionRow = { kind: "daily"; data: MatchdayRecord };
 
 export default function DashboardPage() {
   const admin         = getAdminInfo();
@@ -25,7 +23,6 @@ export default function DashboardPage() {
 
   const [stats, setStats]           = useState<PlatformStats | null>(null);
   const [pools, setPools]           = useState<({ success: boolean } & PoolsOverview) | null>(null);
-  const [matchweeks, setMatchweeks]  = useState<Matchday[]>([]);
   const [matchdays, setMatchdays]    = useState<MatchdayRecord[]>([]);
   const [players, setPlayers]        = useState<Player[]>([]);
   const [reserve, setReserve]        = useState<number | null>(null);
@@ -43,7 +40,6 @@ export default function DashboardPage() {
     const isSuperadmin = admin?.role === "superadmin";
     Promise.all([
       adminApi.stats().catch(() => null),
-      adminApi.listMatchweeks().catch(() => ({ matchweeks: [] as Matchday[] })),
       adminApi.listMatchdays().catch(()  => ({ matchdays:  [] as MatchdayRecord[] })),
       canSeeRevenue
         ? adminApi.listPlayers().catch(() => ({ success: true, players: [] as Player[] }))
@@ -54,9 +50,8 @@ export default function DashboardPage() {
       isSuperadmin
         ? adminApi.poolsOverview().catch(() => null)
         : Promise.resolve(null),
-    ]).then(([s, mw, md, p, r, pl]) => {
+    ]).then(([s, md, p, r, pl]) => {
       if (s) setStats({ totalUsers: s.totalUsers, usersByWallet: s.usersByWallet, revenue: s.revenue });
-      setMatchweeks(mw.matchweeks ?? []);
       setMatchdays(md.matchdays ?? []);
       setPlayers(p.players ?? []);
       if (r) setReserve(r.reserve);
@@ -84,18 +79,15 @@ export default function DashboardPage() {
 
   // Merge and sort all sessions newest-first
   const allRows: SessionRow[] = [
-    ...matchweeks.map((d): SessionRow => ({ kind: "weekly", data: d })),
     ...matchdays.map((d):  SessionRow => ({ kind: "daily",  data: d })),
   ].sort((a, b) => {
-    const dateA = a.kind === "weekly" ? a.data.startsAt : (a.data as MatchdayRecord).matchDate;
-    const dateB = b.kind === "weekly" ? b.data.startsAt : (b.data as MatchdayRecord).matchDate;
+    const dateA = (a.data as MatchdayRecord).matchDate;
+    const dateB = (b.data as MatchdayRecord).matchDate;
     return new Date(dateB).getTime() - new Date(dateA).getTime();
   });
 
   // Active counts
-  const openWeeks    = matchweeks.filter((m) => m.status === "open" || m.status === "locked").length;
   const openDays     = matchdays.filter((m)  => m.status === "open" || m.status === "locked").length;
-  const liveWeek     = matchweeks.find((m) => m.liveActive);
   const liveDay      = matchdays.find((m)  => m.liveActive);
   const activePlayers = players.filter((p) => p.isActive).length;
   // Two buckets only — has a signing wallet or doesn't — so there's nothing
@@ -107,7 +99,6 @@ export default function DashboardPage() {
   const short          = funding.filter((f) => f.state === "short");
 
   // Most relevant open session for "Today" card
-  const todayWeek = matchweeks.find((m) => m.status === "open");
   const todayDay  = matchdays.find((m) => {
     if (m.status !== "open") return false;
     const d = new Date(m.matchDate);
@@ -137,16 +128,15 @@ export default function DashboardPage() {
       )}
 
       {/* Live banner */}
-      {(liveWeek || liveDay) && (
+      {liveDay && (
         <div className="bg-red-500/[0.06] border border-red-500/20 rounded-xl px-4 py-3 flex items-center gap-3">
           <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
           <span className="text-sm font-bold text-red-400">Live session active —</span>
           <span className="text-xs text-muted">
-            {[liveWeek && `Weekly GW${liveWeek.weekNumber}`, liveDay && `Daily ${liveDay.label}`]
-              .filter(Boolean).join(" · ")}
+            Daily {liveDay.label}
           </span>
           <a
-            href={liveWeek ? `/matchdays/${liveWeek._id}` : `/match-days/${liveDay!._id}`}
+            href={`/match-days/${liveDay._id}`}
             className="ml-auto text-xs font-bold text-red-400 hover:underline shrink-0"
           >
             Update rankings →
@@ -157,7 +147,7 @@ export default function DashboardPage() {
       {/* Stat strip */}
       <div className={`grid gap-4 ${canSeeRevenue ? "grid-cols-4" : "grid-cols-3"}`}>
         <StatCard label="Total Users"    value={stats?.totalUsers ?? "—"}   sub="All accounts"            accent="primary" />
-        <StatCard label="Open Sessions"  value={openWeeks + openDays}        sub={`${openWeeks}w · ${openDays}d active`} accent="success" />
+        <StatCard label="Open Sessions"  value={openDays}                     sub={`${openDays}d active`}    accent="success" />
         {canSeeRevenue && (
           <StatCard label="Active Players" value={activePlayers}             sub="In roster"                accent="info" />
         )}
@@ -432,34 +422,6 @@ export default function DashboardPage() {
         <div className="bg-surface border border-border rounded-2xl p-5 flex flex-col gap-4">
           <p className="text-sm font-bold text-text">Active Sessions</p>
 
-          {/* Weekly */}
-          {todayWeek ? (
-            <div className="rounded-xl bg-surface-2 border border-border p-3 flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-black text-primary uppercase tracking-widest px-1.5 py-0.5 bg-primary/10 border border-primary/20 rounded">Weekly</span>
-                  <span className="text-xs font-semibold text-text">GW{todayWeek.weekNumber} · {todayWeek.season}</span>
-                </div>
-                <Badge label={todayWeek.status} variant={todayWeek.status} />
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-[11px]">
-                <div><p className="text-faint uppercase tracking-wider">Opens</p><p className="text-success font-semibold mt-0.5">{fmtTime(todayWeek.startsAt)}</p></div>
-                <div><p className="text-faint uppercase tracking-wider">Classic closes</p><p className="text-warning font-semibold mt-0.5">{fmtTime(todayWeek.endsAt)}</p></div>
-                <div><p className="text-faint uppercase tracking-wider">Lock deadline</p><p className="text-muted font-semibold mt-0.5">{todayWeek.lockDeadline ? fmtTime(todayWeek.lockDeadline) : "—"}</p></div>
-              </div>
-              {canSeeRevenue && (
-                <a href={`/matchdays/${todayWeek._id}`} className="text-center text-xs font-bold text-primary bg-primary/10 border border-primary/20 rounded-xl py-2 hover:bg-primary/20 transition-colors">
-                  Manage →
-                </a>
-              )}
-            </div>
-          ) : (
-            <div className="rounded-xl bg-surface-2 border border-border p-3 text-center">
-              <p className="text-xs text-muted">No open match week.</p>
-              {canSeeRevenue && <a href="/matchdays" className="text-xs text-primary hover:underline mt-1 inline-block">Create match week →</a>}
-            </div>
-          )}
-
           {/* Daily */}
           {todayDay ? (
             <div className="rounded-xl bg-amber-500/[0.04] border border-amber-500/15 p-3 flex flex-col gap-2">
@@ -515,46 +477,35 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent sessions — combined weekly + daily */}
+      {/* Recent sessions */}
       <div className="bg-surface border border-border rounded-2xl overflow-hidden">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div>
             <p className="text-sm font-bold text-text">Recent Sessions</p>
-            <p className="text-xs text-muted mt-0.5">Match weeks and match days combined</p>
+            <p className="text-xs text-muted mt-0.5">Match days</p>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-muted">
-            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-primary/30 inline-block" />Weekly</span>
             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-amber-500/30 inline-block" />Daily</span>
           </div>
         </div>
         <table className="w-full">
           <thead>
             <tr className="border-b border-border">
-              {["Type", "Label", "Date", "Lock", "Status", "Live", ""].map((h) => (
+              {["Label", "Date", "Lock", "Status", "Live", ""].map((h) => (
                 <th key={h} className="px-5 py-3 text-left text-[10px] font-bold text-muted uppercase tracking-wider">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {allRows.slice(0, 10).map((row) => {
-              const isWeekly = row.kind === "weekly";
               const d        = row.data;
-              const dateStr  = isWeekly ? fmtDate((d as Matchday).startsAt) : fmtDate((d as MatchdayRecord).matchDate);
-              const label    = isWeekly ? `GW${(d as Matchday).weekNumber} · ${(d as Matchday).season}` : (d as MatchdayRecord).label;
+              const dateStr  = fmtDate((d as MatchdayRecord).matchDate);
+              const label    = (d as MatchdayRecord).label;
               const lock     = d.lockDeadline ? fmtTime(d.lockDeadline) : "—";
-              const href     = isWeekly ? `/matchdays/${d._id}` : `/match-days/${d._id}`;
+              const href     = `/match-days/${d._id}`;
 
               return (
-                <tr key={`${row.kind}-${d._id}`} className="hover:bg-surface-2 transition-colors">
-                  <td className="px-5 py-3">
-                    <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${
-                      isWeekly
-                        ? "text-primary bg-primary/10 border-primary/20"
-                        : "text-amber-400 bg-amber-500/10 border-amber-500/20"
-                    }`}>
-                      {isWeekly ? "Weekly" : "Daily"}
-                    </span>
-                  </td>
+                <tr key={`daily-${d._id}`} className="hover:bg-surface-2 transition-colors">
                   <td className="px-5 py-3 text-sm font-semibold text-text">{label}</td>
                   <td className="px-5 py-3 text-sm text-muted">{dateStr}</td>
                   <td className="px-5 py-3 text-xs text-muted">{lock}</td>
@@ -576,8 +527,8 @@ export default function DashboardPage() {
             })}
             {allRows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-5 py-8 text-center text-sm text-muted">
-                  No sessions yet. Create a Match Week or Match Day.
+                <td colSpan={6} className="px-5 py-8 text-center text-sm text-muted">
+                  No sessions yet. Create a Match Day first.
                 </td>
               </tr>
             )}

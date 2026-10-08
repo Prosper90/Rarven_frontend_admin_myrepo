@@ -103,20 +103,8 @@ export const adminApi = {
     });
   },
 
-  // Match Weeks (weekly containers)
-  listMatchweeks:             () => api.get<{ success: boolean; matchweeks: Matchday[] }>('/api/admin/matchweeks'),
-  createMatchweek:            (data: Partial<Matchday>) => api.post<{ success: boolean; matchweek: Matchday }>('/api/admin/matchweeks', data),
-  updateMatchweekStatus:      (id: string, status: string) =>
-    api.patch<{ success: boolean; matchweek: Matchday }>(`/api/admin/matchweeks/${id}/status`, { status }),
-  startMatchweekLive:         (id: string) =>
-    api.post<{ success: boolean; matchweek: Matchday }>(`/api/admin/matchweeks/${id}/start-live`, {}),
-  stopMatchweekLive:          (id: string) =>
-    api.post<{ success: boolean; matchweek: Matchday }>(`/api/admin/matchweeks/${id}/stop-live`, {}),
-  updateMatchweekLiveRankings:(id: string, rankings: LiveRankingsInput) =>
-    api.put<{ success: boolean; matchweek: Matchday }>(`/api/admin/matchweeks/${id}/live-rankings`, { rankings }),
-
   // Classic pools
-  createPool: (data: { poolType: 'daily' | 'weekly'; matchweek?: string; matchday?: string; position: string; houseCut?: number }) =>
+  createPool: (data: { poolType: 'daily'; matchday?: string; position: string; houseCut?: number }) =>
     api.post<{ success: boolean; pool: ClassicPool }>('/api/admin/classic/pools', data),
   settlePool: (poolId: string, winnerPlayerId: string) =>
     api.post<{ success: boolean; pool: ClassicPool }>(`/api/admin/classic/pools/${poolId}/settle`, { winnerPlayerId }),
@@ -428,20 +416,6 @@ export type LiveRankingsInput = Partial<{
   DEF: { playerName: string; club: string; rating: number };
   GK:  { playerName: string; club: string; rating: number };
 }>;
-
-export interface Matchday {
-  _id:           string;
-  weekNumber:    number;
-  season:        string;
-  startsAt:      string;
-  endsAt:        string;
-  ratingDeadline:string;
-  lockDeadline:  string | null;
-  status:        'upcoming' | 'open' | 'locked' | 'settled';
-  liveActive:    boolean;
-  liveStartedAt: string | null;
-  liveRankings:  LiveRankings;
-}
 
 export interface MatchdayRecord {
   _id:           string;
