@@ -205,7 +205,7 @@ export default function UsersPage() {
                 <input
                   value={creditNote}
                   onChange={(e) => setCreditNote(e.target.value)}
-                  placeholder="e.g. Welcome bonus, promo code XYZ"
+                  placeholder="e.g. Promo credit, compensation"
                   className="bg-surface-2 border border-border rounded-xl px-4 py-2.5 text-sm text-text outline-none focus:border-primary/50 placeholder:text-faint"
                 />
               </div>
