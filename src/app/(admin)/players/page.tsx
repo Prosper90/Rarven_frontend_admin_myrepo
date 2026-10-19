@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   Download,
   Upload,
+  RefreshCw,
 } from "lucide-react";
 
 const POSITIONS = ["GK","LB","CB","RB","DM","LM","AM","CAM","RM","LW","RW","ST"];
@@ -541,6 +542,7 @@ export default function PlayersPage() {
   const [error, setError]         = useState("");
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [metricsProgress, setMetricsProgress] = useState<{ total: number; withRealStats: number } | null>(null);
+  const [updatingStats, setUpdatingStats] = useState(false);
 
   // Read role client-side only (localStorage)
   useEffect(() => { setAdminRole(getAdminInfo()?.role ?? null); }, []);
@@ -585,6 +587,42 @@ export default function PlayersPage() {
       const res = await adminApi.getMetricsProgress();
       setMetricsProgress({ total: res.total, withRealStats: res.withRealStats });
     } catch { /* non-critical — leave last known value */ }
+  }
+
+  // The one action that brings the roster's *stats* up to date for the season:
+  // re-fetch a batch of team season stats from API-Football and re-derive every
+  // active player's price from them. Same backend call the Pro page's
+  // "Recalculate Pricing" makes — surfaced here because this is the page
+  // admins actually manage players from, and it is resumable (the free API tier
+  // only lets a batch through per run), so the result says how much is left.
+  async function handleUpdatePlayersAndStats() {
+    if (!confirm(
+      "Update players and stats for the season?\n\n" +
+      "Fetches fresh season stats for the next batch of teams and re-derives " +
+      "every active player's price and the roster's stats coverage.\n\n" +
+      "This is paced for the free API tier, so it advances a batch at a time — " +
+      "run it again to continue where it left off."
+    )) return;
+
+    setUpdatingStats(true);
+    setError("");
+    try {
+      const res = await adminApi.recalculateProPricing();
+      const { teamsRemaining, updated, failed } = res.metrics;
+      const tail = teamsRemaining > 0
+        ? `${teamsRemaining} team(s) still pending — run it again to continue (free API tier).`
+        : "All teams covered.";
+      alert(
+        `Players & stats updated.\n\n` +
+        `${res.pricing.priced} player(s) priced, ${updated} stat line(s) refreshed` +
+        (failed ? `, ${failed} failed` : "") + `.\n${tail}`
+      );
+      await Promise.all([load(), loadProgress()]);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Update failed");
+    } finally {
+      setUpdatingStats(false);
+    }
   }
 
   // ── Search debounce ────────────────────────────────────────────────────────
@@ -819,9 +857,20 @@ export default function PlayersPage() {
           <p className="text-sm text-muted mt-0.5">{players.filter((p) => p.isActive).length} active players in roster</p>
         </div>
         {tab === "roster" && (
-          <button onClick={openCreate} className="px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary-dim transition-colors">
-            + Add Player
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleUpdatePlayersAndStats}
+              disabled={updatingStats}
+              title="Re-fetch season stats for the next team batch and re-derive every active player's price. Resumable — run again to continue on the free API tier."
+              className="px-4 py-2.5 rounded-xl bg-surface-3 border border-border text-sm font-bold text-text hover:border-primary/30 disabled:opacity-50 transition-colors flex items-center gap-2"
+            >
+              {updatingStats ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              Update Players &amp; Stats
+            </button>
+            <button onClick={openCreate} className="px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary-dim transition-colors">
+              + Add Player
+            </button>
+          </div>
         )}
       </div>
 
@@ -853,10 +902,10 @@ export default function PlayersPage() {
       {/* ── Roster tab ── */}
       {tab === "roster" && (<>
 
-      {/* Season-stats coverage — the resumable team-batched refresh (Pro
-          admin page's "Recalculate Pricing") is what actually advances this;
-          shown here too since this is the page admins actually manage
-          players from. */}
+      {/* Season-stats coverage — advanced by "Update Players & Stats" above (the
+          same resumable team-batched refresh as the Pro admin page's
+          "Recalculate Pricing"); shown here since this is the page admins
+          actually manage players from. */}
       {metricsProgress && (
         <div className="rounded-xl bg-surface border border-border px-4 py-3 flex items-center gap-4">
           <div className="flex-1">
@@ -875,13 +924,15 @@ export default function PlayersPage() {
               />
             </div>
           </div>
-          <a
-            href="/pro"
-            className="shrink-0 text-xs font-semibold text-primary hover:underline whitespace-nowrap"
-            title="Free API tier — click Recalculate Pricing repeatedly to keep making progress"
+          <button
+            onClick={handleUpdatePlayersAndStats}
+            disabled={updatingStats}
+            className="shrink-0 px-3 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-dim disabled:opacity-50 transition-colors flex items-center gap-1.5 whitespace-nowrap"
+            title="Resumable on the free API tier — run it again to continue where it left off"
           >
-            Recalculate on Pro page →
-          </a>
+            {updatingStats ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+            {updatingStats ? "Updating…" : "Update Players & Stats"}
+          </button>
         </div>
       )}
 

@@ -256,7 +256,7 @@ export default function ProAdminPage() {
       {error && <p className="text-xs text-danger bg-danger/10 border border-danger/20 rounded-xl px-4 py-3">{error}</p>}
 
       <div className="grid grid-cols-3 gap-4">
-        <StatCard label="Reference Budget" value={config ? fmtCurrency(config.budgetCap) : "—"} accent="primary" />
+        <StatCard label="Reference Budget (display)" value={config ? fmtCurrency(config.budgetCap) : "—"} accent="primary" />
         <StatCard label="Pricing Multiplier" value={config ? `×${config.pricingMultiplier}` : "—"} accent="info" />
         <StatCard label="Open Gameweek" value={openGw ? `#${openGw.number}` : "None"} accent="success" />
       </div>
