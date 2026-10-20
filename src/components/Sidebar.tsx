@@ -6,6 +6,7 @@ import Image from "next/image";
 import {
   LayoutDashboard,
   CalendarDays,
+  CalendarRange,
   Zap,
   TrendingUp,
   User,
@@ -48,6 +49,12 @@ const NAV: {
     href: "/pro",
     label: "Fantasy",
     icon: TrendingUp,
+    roles: ["superadmin", "pool_manager"],
+  },
+  {
+    href: "/gameweeks",
+    label: "Gameweeks",
+    icon: CalendarRange,
     roles: ["superadmin", "pool_manager"],
   },
   {

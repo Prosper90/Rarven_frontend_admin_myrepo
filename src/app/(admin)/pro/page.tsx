@@ -68,6 +68,8 @@ export default function ProAdminPage() {
 
   const [poolGameweek, setPoolGameweek] = useState<ProGameweek | null>(null);
   const [poolSummary, setPoolSummary] = useState<ProPoolSummary | null>(null);
+  // Total players bought for the open week, in USDC. null = no open week.
+  const [openSpent, setOpenSpent] = useState<number | null>(null);
 
   async function load() {
     setLoading(true);
@@ -80,12 +82,36 @@ export default function ProAdminPage() {
       setGameweeks(gwRes.gameweeks);
       setConfig(cfgRes.config);
       setOverview(ovRes.overview);
+
+      // Total spent *on players* for the open week, read straight from its
+      // detail so it can't drift from what the squad board actually holds.
+      // Starts at $0 when a week opens and climbs as squads buy.
+      const open = gwRes.gameweeks.find((g) => g.status === "open");
+      if (open) {
+        const det = await adminApi.getProGameweekDetail(open._id).catch(() => null);
+        setOpenSpent(det?.detail.totalSpent ?? null);
+      } else {
+        setOpenSpent(null);
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally { setLoading(false); }
   }
 
   useEffect(() => { load(); }, []);
+
+  // The one week currently selling. Derived up here (before the refresh timer)
+  // because the timer keys off it.
+  const openGw = gameweeks.find((g) => g.status === "open");
+
+  // While a week is open, refresh the spent figure periodically so it climbs
+  // on screen as squads buy — the point of the card is "watch the money come
+  // in", which a static number on page load can't show.
+  useEffect(() => {
+    if (!openGw) return;
+    const t = setInterval(() => { load(); }, 60_000);
+    return () => clearInterval(t);
+  }, [openGw?._id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleCreate() {
     setBusy("create");
@@ -218,8 +244,6 @@ export default function ProAdminPage() {
     finally { setBusy(null); }
   }
 
-  const openGw = gameweeks.find((g) => g.status === "open");
-
   return (
     <div className="p-8 flex flex-col gap-6">
       <div className="flex items-center justify-between">
@@ -256,7 +280,12 @@ export default function ProAdminPage() {
       {error && <p className="text-xs text-danger bg-danger/10 border border-danger/20 rounded-xl px-4 py-3">{error}</p>}
 
       <div className="grid grid-cols-3 gap-4">
-        <StatCard label="Reference Budget (display)" value={config ? fmtCurrency(config.budgetCap) : "—"} accent="primary" />
+        <StatCard
+          label="Total Spent on Players"
+          value={fmtCurrency(openSpent ?? 0)}
+          sub={openGw ? `Gameweek #${openGw.number} · real USDC, rising as squads buy` : "No gameweek open"}
+          accent="primary"
+        />
         <StatCard label="Pricing Multiplier" value={config ? `×${config.pricingMultiplier}` : "—"} accent="info" />
         <StatCard label="Open Gameweek" value={openGw ? `#${openGw.number}` : "None"} accent="success" />
       </div>

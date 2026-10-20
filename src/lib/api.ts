@@ -167,6 +167,18 @@ export const adminApi = {
   syncProGameweekFixtures: (id: string) =>
     api.post<{ success: boolean; detail: ProGameweekDetail }>(`/api/admin/pro/gameweeks/${id}/sync-fixtures`, {}),
 
+  // Research-only real fixtures for a date window (the /gameweeks route).
+  // Spends api-football quota: one request per league (5 by default).
+  researchProFixtures: (params: { from: string; to: string; leagueIds?: number[] }) => {
+    const qs = new URLSearchParams();
+    qs.set('from', params.from);
+    qs.set('to', params.to);
+    if (params.leagueIds && params.leagueIds.length > 0) qs.set('leagueIds', params.leagueIds.join(','));
+    return api.get<{ success: boolean; leagues: ProLeagueRound[]; fixtures: ProResearchFixture[] }>(
+      `/api/admin/pro/fixtures/research?${qs}`,
+    );
+  },
+
   // FieldPort Pro — on-chain USDC escrow.
   //
   // Read-only observation plus a single order-free "advance". The lifecycle cron
@@ -531,6 +543,32 @@ export interface ProFixture {
   kickoff: string;
   status: 'scheduled' | 'live' | 'finished';
   ratingsIngested: boolean;
+}
+
+/** One league's real matchweek, from GET /admin/pro/fixtures/research. */
+export interface ProLeagueRound {
+  leagueId: number;
+  league: string;
+  /** api-football's round label, e.g. "Regular Season - 8". */
+  round: string | null;
+  /** `round` parsed to its trailing number; null for knockout rounds. */
+  matchweek: number | null;
+  fixtureCount: number;
+  firstKickoff: string | null;
+  lastKickoff: string | null;
+}
+
+/** One real api-football fixture from GET /admin/pro/fixtures/research. */
+export interface ProResearchFixture {
+  apiFootballFixtureId: number;
+  leagueId: number;
+  league: string;
+  round: string | null;
+  roundNumber: number | null;
+  homeTeam: string;
+  awayTeam: string;
+  kickoff: string;
+  status: 'scheduled' | 'live' | 'finished';
 }
 
 export interface ProRankedSquad {

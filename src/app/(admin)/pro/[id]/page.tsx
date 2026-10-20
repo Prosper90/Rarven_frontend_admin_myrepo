@@ -197,7 +197,7 @@ export default function ProGameweekDetailPage({ params }: { params: Promise<{ id
       <div className="bg-surface border border-border rounded-xl px-5 py-4 flex items-center gap-3">
         <Wallet size={14} className="text-muted shrink-0" />
         <p className="text-xs text-muted">
-          Budget cap snapshot: <span className="text-text font-semibold">{fmtCurrency(gw.budgetCapSnapshot)}</span>
+          Total spent on players: <span className="text-text font-semibold">{fmtCurrency(detail.totalSpent)}</span>
           {" · "}Pricing multiplier: <span className="text-text font-semibold">×{gw.pricingMultiplierSnapshot}</span>
           {gw.firstKickoffAt && <> {" · "}First kickoff: <span className="text-text font-semibold">{fmtDateTime(gw.firstKickoffAt)}</span></>}
         </p>
